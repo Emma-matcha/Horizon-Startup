@@ -1,0 +1,530 @@
+# 红房子：PC 端家庭视力筛查与趋势跟踪 MVP 策划书
+
+日期：2026-07-25  
+版本：1.0（设计确认稿）  
+目标工期：1.5 天，约 15 个有效开发小时  
+目标设备：13.6 英寸 MacBook Air，2560×1664，224 ppi  
+目标浏览器：最新版桌面 Chrome，全屏、100% 浏览器缩放
+
+> **安全声明（所有用户首次进入与报告页必须显示）**  
+> 本产品仅用于家庭视力筛查与趋势记录，不能替代医院验光、眼科检查或医疗诊断。出现突然视力下降、眼痛、视野缺损或其他异常时，应及时寻求专业医疗帮助。
+
+---
+
+## CAPABILITY
+
+红房子让青少年及其家长在一台已标定的 13.6 英寸 MacBook Air 上，以卷尺确认 2 米距离，分别遮盖左右眼，通过普通话方向口令完成单 E 视标筛查，并在本地查看本次估测结果与历史变化趋势。交付后的变化不是“用户可以自行诊断近视”，而是“用户可以在相同条件下重复完成一套可追溯的家庭筛查，发现可能的持续下降后进行复测或寻求专业检查”。
+
+## CONSTRAINTS
+
+### 固定产品规则
+
+- 定位是筛查与趋势跟踪，不提供近视度数、处方、疾病结论或诊疗建议。
+- 测试必须分右眼、左眼完成；右眼测试时遮左眼，左眼测试时遮右眼。
+- MVP 仅支持指定 MacBook Air 与 Chrome；不宣称跨设备物理尺寸准确。
+- 距离由卷尺从屏幕表面向后量取 2 米；视差法、摄像头测距和其他距离选项不进入 MVP。
+- 所有用户数据、测试记录和仿真历史保存在当前浏览器；原始音频不保存。
+- “登录”在 MVP 中是本地档案入口，不是真实账号、密码或云端身份认证。
+- 5.3 只作为探索上限；正式趋势和风险计算最高使用 5.2。
+- 任何测试条件失效、页面失焦、退出全屏或语音模型未就绪时，系统不得把输入计为答错。
+
+### 视觉不变量
+
+- 白色与暖白为主要界面底色，炭黑信息层级，朱红为唯一强强调色。
+- 首页使用真实摄影感的冰岛小镇白墙红顶教堂与写实绿草；只借鉴用户参考图中的建筑和绿地，不复制公路、山脉、云雾或原图构图。
+- 不使用光学视窗、镜筒、圆环、瞄准线或隧道式框景。
+- 红顶必须有较高对比度和饱和度，但采用哑光真实材质，禁止塑料、黏土或微缩模型感。
+- 正式作答期间测试页只能有纯白背景和一个黑色 E 视标；任何动效必须在系统进入 `READY` 前结束。
+
+### 信任边界
+
+- 浏览器可读取麦克风 PCM 流，但不得持久化音频、上传音频或在测试结束后继续监听。
+- Rhino 模型与上下文可本地加载；创建模型和获取 AccessKey 需要 Picovoice 的外部服务。AccessKey 不得提交到 Git。
+- 客户端网页无法真正保守长期密钥；现场演示可使用本机 `.env.local`，正式部署前必须与供应商确认 Web AccessKey 的安全与授权方案。
+- 仿真数据和真实数据必须通过 `source: "demo" | "real"` 分离，仿真重置不得覆盖真实记录。
+
+## IMPLEMENTATION CONTRACT
+
+### 1. Actors
+
+- **受测者**：完成距离确认、遮眼和普通话口令作答。
+- **家长/协助者**：可帮助量取 2 米、确认遮眼方式和查看趋势。
+- **演示者**：在黑客松现场加载仿真历史、运行离线检查、展示报告。
+- **浏览器运行时**：负责尺寸校准、状态机、语音推理、动画与本地存储。
+
+### 2. Surfaces and user journey
+
+#### P0：首页
+
+- 左上角团队 Logo“红房子”，右上角“登录”。
+- 真实冰岛白墙红顶教堂位于远处绿地，前景树木产生 12–22 px 鼠标视差，教堂仅移动 3–5 px。
+- 主文案：“向清晰，再近一点”；按钮：“开始检查”。
+- 首次进入弹出不可跳过的非医疗声明；确认后记住版本号。
+- 点击开始时，文字上移淡出、绿地轻微推进，白色覆盖进入准备页。禁止使用镜筒穿越效果。
+
+效果图：[01-home-photoreal.png](../../design/mockups/01-home-photoreal.png)
+
+#### P1：本地档案
+
+- 点击“登录”打开本地档案抽屉，仅收集昵称和可选头像颜色。
+- 明确文案：“仅保存在此浏览器，不会创建网络账号。”
+- 支持导出 JSON、清除本地数据、恢复演示数据。
+
+#### P2：环境与距离准备
+
+- 检查 Chrome、目标分辨率、`devicePixelRatio≈2`、100% 浏览器缩放、全屏状态和麦克风权限。
+- 浏览器不能可靠地自动证明当前缩放正好为 100%；界面要求用户确认设置，50 mm 实物测量才是最终有效性门禁。
+- 显示理论长度 50 mm 的校准线。目标原生像素：`50 × 224 / 25.4 = 440.94 px`；DPR=2 时目标 CSS 宽度约 `220.47 px`。
+- 用户用尺核验。偏差超过 1 mm 时不得生成正式趋势，仅允许“演示模式”。
+- 指导从屏幕表面向后量取 2 米，环境光均匀，避免强光直射屏幕。
+- 用户点击“我已站好”或说“确认”。
+
+效果图：[02-distance-setup.png](../../design/mockups/02-distance-setup.png)
+
+#### P3：倒计时与分眼提示
+
+- 纯白全屏依次显示巨大 3、2、1；每个数字持续 1000 ms。
+- 数字由轻微失焦进入清晰，再放大淡出；不显示圆环、场景或导航。
+- 第一次提示“请遮住左眼，先测右眼”；换眼时提示“请遮住右眼，继续测左眼”。
+
+效果图：[03-countdown.png](../../design/mockups/03-countdown.png)
+
+#### P4：单眼测试
+
+- 从 4.6 开始，每题只显示一个随机方向 E。
+- 旧视标 140 ms 缩小失焦；纯白留空 120 ms；新视标 260 ms 由失焦到锐利。
+- 不把一个方向旋转成另一个方向，避免泄露答案。
+- 动画结束后触发 `READY`，播放短提示音并开始接收口令；`READY` 之前的方向词全部忽略。
+- 正式画面稳定后只能有纯白背景和黑色 E。
+
+效果图：[04-optotype-transition.png](../../design/mockups/04-optotype-transition.png)
+
+#### P5：完成与分析
+
+- 两眼完成后立即计算结果，视觉上固定展示约 1.8 秒的分析过渡。
+- 教堂与绿草由略微失焦变为清晰；一条极细扫描光掠过草地。
+- 提供“跳过动画”，避免用户误以为后台正在进行医疗分析。
+
+效果图：[05-analysis.png](../../design/mockups/05-analysis.png)
+
+#### P6：本次报告
+
+- 同屏展示右眼、左眼本次估测结果与近 7 天双折线趋势。
+- 明确标注“估测视力”，同时显示有效性条件和非医疗声明。
+- 状态文案仅允许“整体保持稳定”“建议相同条件复测”“可能下降，建议复测或咨询专业人士”。
+- 点击“查看详细趋势”进入 7 天、30 天、全部三个范围。
+
+效果图：[06-report.png](../../design/mockups/06-report.png)  
+详情效果图：[07-history-detail.png](../../design/mockups/07-history-detail.png)
+
+### 3. Visual acuity mathematics
+
+依据现行 [GB/T 11533-2011《标准对数视力表》](https://openstd.samr.gov.cn/bzgk/std/newGbInfo?hcno=A9F9E03A346211223DE34421A85CA1C8)，E 视标的每一笔画或空隙为外框边长的 1/5；当笔画或缺口对眼结点张角为 1′ 时，对应 5 分记录法的正常视力 5.0。因此整个 E 外框张角是 5′。
+
+#### 3.1 5.0 视标在 2 米处的物理尺寸
+
+设：
+
+- 观察距离 `D = 2000 mm`
+- E 外框张角 `θ = 5′ = 5 × π / (180 × 60) rad`
+
+使用弦长近似的精确形式：
+
+```text
+H5.0 = 2 × D × tan(θ / 2)
+     = 2 × 2000 × tan(5′ / 2)
+     = 2.90888 mm
+```
+
+单笔画与单空隙尺寸：
+
+```text
+stroke5.0 = H5.0 / 5 = 0.58178 mm
+```
+
+#### 3.2 从毫米换算为目标屏幕原生像素
+
+Apple 官方规格给出的目标屏幕像素密度为 224 ppi：
+
+```text
+nativePx5.0 = 2.90888 × 224 / 25.4
+             = 25.65 native px
+
+strokePx5.0 = 25.65 / 5
+             = 5.13 native px
+```
+
+在 `devicePixelRatio=2` 时，5.0 视标外框约为 `12.83 CSS px`，但 Canvas 内部必须保持约 25.65 个原生像素的采样。不能误把 26 当作 CSS 像素，否则物理尺寸会约放大一倍。
+
+#### 3.3 其他等级
+
+5 分记录值为 `L` 时：
+
+```text
+decimalAcuity(L) = 10^(L - 5)
+scale(L) = 1 / decimalAcuity(L) = 10^(5 - L)
+H(L) = H5.0 × scale(L)
+```
+
+完整机器可读表见 [optotype-sizes-2m-224ppi.csv](../../data/optotype-sizes-2m-224ppi.csv)。核心等级如下：
+
+| 等级 | 外框 mm | 原生 px | DPR=2 CSS px | 单笔画原生 px | 用途 |
+|---:|---:|---:|---:|---:|---|
+| 4.6 | 7.307 | 64.44 | 32.22 | 12.89 | 起点 |
+| 4.7 | 5.804 | 51.18 | 25.59 | 10.24 | 正式计分 |
+| 4.8 | 4.610 | 40.66 | 20.33 | 8.13 | 正式计分 |
+| 4.9 | 3.662 | 32.30 | 16.15 | 6.46 | 正式计分 |
+| 5.0 | 2.909 | 25.65 | 12.83 | 5.13 | 正式计分 |
+| 5.1 | 2.311 | 20.38 | 10.19 | 4.08 | 正式计分 |
+| 5.2 | 1.835 | 16.19 | 8.09 | 3.24 | 正式计分上限 |
+| 5.3 | 1.458 | 12.86 | 6.43 | 2.57 | 探索上限，不进风险计算 |
+
+#### 3.4 绘制与图片档案规则
+
+- 正式 E 不使用字体，也不使用生成式图片；由归一化 5×5 几何网格确定性绘制。
+- Canvas 的 `width/height` 使用原生像素，CSS 尺寸按 DPR 缩小，确保接近 1:1 映射。
+- 每个等级、四个方向生成审核档案：`public/optotypes/2m-224ppi/{level}/{up|right|down|left}.png`。
+- PNG 整数尺寸只用于审计与预加载；运行时以浮点几何 Canvas 为权威，避免 26 不能被 5 整除导致笔画不等宽。
+- 生成器必须输出清单：理论毫米、理论原生像素、实际绘制边界、误差百分比和 SHA-256。
+- 允许误差：4.6–5.2 外框物理尺寸误差不超过 ±2%；超过则设备门禁失败。
+
+### 4. Test state machine
+
+每只眼独立运行以下状态：
+
+```text
+COUNTDOWN → TRANSITION_IN → READY → LISTENING → EVALUATE
+                                      │
+                                      ├─ correct → level + 0.1, consecutiveWrong = 0
+                                      ├─ first wrong → same level, new direction
+                                      ├─ second consecutive wrong → level - 0.1
+                                      └─ third consecutive wrong → COMPLETE_EYE
+```
+
+规则：
+
+- 初始 `level=4.6`，`consecutiveWrong=0`。
+- 任意一次答对都会清零连续错误计数，并更新 `bestCorrectLevel`。
+- 第一次答错：同行换方向，方向不得与上一题相同。
+- 连续第二次答错：退回上一等级，继续随机新方向。
+- 连续第三次答错：结束该眼。
+- 答对 5.3：结束并记为探索上限；风险分析按 5.2 封顶。
+- 从未答对：结果显示“低于 4.6／建议复测”，不能伪造为 4.5。
+- 最终估测值：本次 `bestCorrectLevel`，不是结束时所在等级。
+- 该单符号阶梯有 25% 猜中概率，不能冒充完整临床行视标计分，因此报告始终使用“估测”。
+
+随机性约束：
+
+- 使用 `crypto.getRandomValues`，不使用 `Math.random`。
+- 同行重试不得重复上一方向；任一方向不得连续出现超过两次。
+- 每次记录 `sequenceIndex`、目标方向、等级、识别结果、是否正确、反应时、重试次数和状态迁移。
+- 随机序列不在测试中向用户展示，但保存在记录中供复盘。
+
+### 5. Offline Mandarin voice recognition
+
+#### 5.1 Selected engine
+
+MVP 采用 **Picovoice Rhino Web (WASM)**，原因：
+
+- 支持普通话与 WebAssembly 浏览器运行。
+- 面向受限语义域直接输出 intent，适合“上、下、左、右、确认”五个命令，不依赖大语言模型。
+- 官方说明其干净环境 intent 准确率超过 99%，9 dB 信噪比噪声环境约 97%；该数字是厂商通用基准，不是本项目已经达到的成绩。[Rhino 准确率说明](https://picovoice.ai/docs/faq/rhino/)
+- Web 快速入门要求 `.rhn` context、普通话 `.pv` 模型和 AccessKey，模型可被缓存到 IndexedDB。[Rhino Web 文档](https://picovoice.ai/docs/quick-start/rhino-web/)
+
+备选：
+
+- **sherpa-onnx KWS**：开源、中文自定义关键词、支持本地推理，但官方当前 KWS 文档重点提供命令行与 Android 路径，Web 集成和本场景 99% 证据不足。[sherpa-onnx KWS](https://k2-fsa.github.io/sherpa/onnx/kws/index.html)
+- **Vosk**：中文小模型约 42 MB，但官方列出的通用中文错误率明显高于本项目目标，不作为主方案。[Vosk 模型表](https://alphacephei.com/vosk/models)
+
+#### 5.2 Rhino context
+
+```yaml
+context:
+  expressions:
+    chooseDirection:
+      - "$direction:value"
+    confirmDistance:
+      - "确认"
+  slots:
+    direction:
+      - 上
+      - 下
+      - 左
+      - 右
+```
+
+- 方向测试只接受 `chooseDirection`；距离页只接受 `confirmDistance`。
+- `isUnderstood=false`、模型未完成 endpointing、过低输入电平或命令不在当前页面时，均不计错。
+- 第一次未理解提示“请再说一次”；连续两次未理解后显示键盘方向键兜底。
+- 原始 PCM 只存在 AudioWorklet/Rhino 内存管线，完成或离开页面立即释放。
+
+#### 5.3 Accuracy acceptance tests
+
+“达到 99%”必须限定为目标设备、目标距离和目标环境中的实测指标，不能直接引用厂商数字。
+
+主验收集：
+
+- 10 名普通话使用者，尽量覆盖男女、不同音高和轻微口音。
+- 每人对五个命令各说 20 次，共 1000 条目标指令。
+- 距离：用户嘴部到 MacBook Air 内置麦克风约 2 米。
+- 环境：安静教室或房间，建议背景噪声不高于约 40 dBA，并记录麦克风端估算 SNR。
+- 顺序随机；测试者不能看到系统当前期望词，避免迎合。
+
+通过指标：
+
+| 指标 | 安静环境目标 | 9 dB SNR 压力测试目标 |
+|---|---:|---:|
+| 已接受命令精确率 | ≥99% | ≥97% |
+| 命令召回率 | ≥95% | ≥90% |
+| 拒识/要求重说率 | ≤5% | ≤10% |
+| 非命令误接受率 | <1% | <2% |
+| 端点后 p95 响应延迟 | ≤1000 ms | ≤1200 ms |
+
+补充用例：
+
+1. 同一命令快说、慢说、轻声、较大声各 10 次。
+2. 2 米处正对、左偏 30°、右偏 30°。
+3. 风扇声、键盘声、走廊说话声与 9 dB 合成噪声。
+4. 播放“上学、下面、左右、确认一下”等非目标短语，验证不会误触发。
+5. 连续说两个方向，只允许当前 endpoint 的一个 intent。
+6. 用户在动画未完成前说方向，系统必须忽略而非缓存到下一题。
+7. 麦克风权限拒绝、拔出外接麦克风、切换标签页、休眠恢复。
+8. 首次在线加载成功后断网重载，验证现场离线运行路径；若浏览器清理 IndexedDB，则明确提示重新加载模型。
+
+若主验收集未达到 99%，报告和路演不得宣传“99%”；保留键盘输入并把语音描述为“离线命令词实验功能”。
+
+### 6. Risk and trend logic
+
+- 分右眼、左眼独立分析。
+- 仅使用 `source=real`、完整完成、设备校准通过、全屏未中断的记录。
+- 基线取此前 3 次有效测试的中位数，减少单次波动影响。
+- 最新结果比基线下降 0.1：显示“建议在相同条件下观察或复测”，不标风险。
+- 最新结果下降 ≥0.2：显示“可能下降，建议在相同条件复测；持续异常请咨询专业人士”。
+- 5.3 在计算时封顶为 5.2。
+- 采用 0.2 的谨慎阈值，是因为 ETDRS 研究显示两行（0.2 logMAR）变化较能可靠地区分真实变化与重复测量误差，而 0.1 或更小通常不能。[PubMed](https://pubmed.ncbi.nlm.nih.gov/12882770/)
+- 本项目的自适应算法不是 ETDRS，阈值只能作为非诊断性的产品启发式规则，必须通过后续真实验证重新评估。
+
+### 7. Data contract
+
+```ts
+type TestRecord = {
+  id: string;
+  profileId: string;
+  startedAt: string;
+  completedAt: string | null;
+  source: "real" | "demo";
+  status: "completed" | "aborted";
+  deviceProfile: {
+    screenWidth: number;
+    screenHeight: number;
+    devicePixelRatio: number;
+    browser: string;
+  };
+  calibration: {
+    expectedMm: 50;
+    userConfirmed: boolean;
+    distanceMm: 2000;
+  };
+  rightEye: EyeResult | null;
+  leftEye: EyeResult | null;
+  trials: Trial[];
+  voiceStats: {
+    accepted: number;
+    rejected: number;
+    fallbackUsed: boolean;
+    medianLatencyMs: number | null;
+  };
+  validityFlags: string[];
+  riskHint: "stable" | "observe" | "retest" | "insufficient";
+};
+```
+
+持久化：
+
+- `localStorage[red-house:v1:profiles]`
+- `localStorage[red-house:v1:records]`
+- `localStorage[red-house:v1:consent]`
+- Rhino 模型由 SDK 缓存于 IndexedDB。
+- 提供 JSON 导出与“一键清除”；清除后无法恢复，操作前二次确认。
+
+仿真数据：
+
+- 固定 seed 生成最近 30 天 8 条记录，右眼约 4.8–5.1，左眼约 4.6–4.9。
+- 图表用完整日期轴插值显示，但卡片“有效测试”只统计真实记录点。
+- `demo` 数据使用不同 ID 前缀；新增真实记录永不被“恢复演示数据”覆盖。
+
+### 8. Architecture
+
+推荐栈：
+
+- Vite + React + TypeScript
+- GSAP：页面和首页景深动效；测试状态机不依赖 GSAP
+- Canvas 2D：E 视标的确定性几何绘制
+- Rhino Web + WebVoiceProcessor：离线普通话 intent
+- 纯 TypeScript reducer：测试状态机和风险分析
+- localStorage + IndexedDB：本地记录与模型缓存
+- 自定义 SVG 折线图：减少额外图表依赖并完全控制动效
+
+模块边界：
+
+```text
+UI Pages ───────┐
+Motion Director ├──> Test Engine ──> Trial/Event Log
+Device Gate ────┘         │
+                           ├── Optotype Generator
+                           ├── Speech Adapter (Rhino / Keyboard)
+                           └── Result + Risk Analyzer
+                                      │
+                                      └── Local Repository
+```
+
+关键不变量：
+
+- 只有 Test Engine 能改变等级、连续错误数、当前眼和完成状态。
+- Motion Director 只能订阅状态并上报 `ANIMATION_COMPLETE`，不能直接判分。
+- Speech Adapter 只输出标准命令枚举，不知道答案。
+- Risk Analyzer 只读已完成记录，不修改原始试次。
+
+### 9. Motion specification
+
+| 场景 | 动效 | 时长 | 约束 |
+|---|---|---:|---|
+| 首页入场 | 树木景深错层、教堂轻推进、文字错峰出现 | 900 ms | 只用 transform/opacity |
+| 首页→准备 | 文案上移、绿地轻推、暖白覆盖 | 850 ms | 无圆形镜头转场 |
+| 准备步骤 | 卡片横向推进、50 mm 线从中心生长 | 520 ms | 数值不形变 |
+| 倒计时 | 数字聚焦、放大淡出 | 1000 ms/个 | 无圆环 |
+| E 退场 | 缩小并失焦 | 140 ms | 不旋转 |
+| 纯白间隔 | 无内容 | 120 ms | 不接收输入 |
+| E 入场 | 失焦到锐利 | 260 ms | 完成后才 READY |
+| 分析 | 教堂由模糊变清晰、细线扫描 | 1800 ms | 可跳过 |
+| 报告 | 数字错峰弹入、折线绘制 | 420/900 ms | reduced-motion 降级 |
+
+统一缓动：`cubic-bezier(.22, 1, .36, 1)`。检测到 `prefers-reduced-motion` 时，除倒计时外均改为不超过 120 ms 的淡入淡出。
+
+### 10. Error and recovery behavior
+
+- 麦克风拒绝：解释原因，允许键盘方向键继续，但报告标注 `voiceFallback=true`。
+- Rhino 加载失败：重试一次；仍失败则键盘模式，不阻断 MVP。
+- 页面失焦或退出全屏：立即暂停，返回后重新展示同一题，不改变方向且不计错。
+- 页面刷新：当前记录标为 `aborted`，不进入趋势；允许重新开始该眼。
+- 本地数据解析失败：先提供损坏 JSON 下载，再重建空 Schema；不静默丢失。
+- 屏幕校准失败：允许体验演示，但禁止把结果标为“有效测试”。
+- 未说话或超时：不计错，提示一次；连续两次无响应后显示键盘兜底。
+
+### 11. Verification plan
+
+#### 单元测试
+
+- 4.0–5.3 公式值与 CSV 相符，允许误差 `<0.01 px`。
+- 5.0 在 2 米、224 ppi 下为约 2.909 mm / 25.65 px。
+- 四方向 E 的外框、笔画、空隙和旋转映射正确。
+- 答对、首错、二错、三错、换眼、5.3 上限、从未答对等状态迁移。
+- `READY` 前输入被忽略；低置信拒识不计错。
+- 风险阈值、5.3 封顶、中位数基线和 demo 数据隔离。
+
+#### 集成测试
+
+- 首次授权麦克风→Rhino 加载→说“确认”→倒计时→方向识别→完成两眼→生成报告。
+- 拒绝麦克风→键盘兜底完整流程。
+- 中途切换标签页→暂停→恢复当前题。
+- 重载页面→aborted 不进入趋势。
+- 一键清除、JSON 导出、恢复演示数据。
+
+#### 视觉与物理验收
+
+- 50 mm 校准线用实体尺测量误差 ≤1 mm。
+- Chrome 100%、全屏、DPR=2 时 5.0 外框理论值约 2.909 mm。
+- 测试进入 READY 后录屏逐帧确认没有位移、模糊、滤镜或残影。
+- 首页动效在目标 MacBook Air 上保持接近 60 fps；长任务不得明显阻塞音频线程。
+- 页面在 `prefers-reduced-motion` 下无大幅视差或缩放。
+
+### 12. One-and-a-half-day execution plan
+
+#### 第一天上午（0–4 小时）
+
+1. 建立 Vite/React/TypeScript、设计令牌和页面状态骨架。
+2. 先写 Test Engine 与尺寸公式测试，再实现状态机和 Canvas E。
+3. 实现设备门禁、50 mm 校准和全屏暂停机制。
+
+验收点：键盘方向键可以无 UI 动效地完成两眼流程；像素计算测试全绿。
+
+#### 第一天下午（4–9 小时）
+
+1. 集成 Rhino Adapter、普通话 context、麦克风权限与低置信重说。
+2. 完成环境页、倒计时页、测试页和本地事件日志。
+3. 在 2 米距离用至少 3 人进行 150 条快速语音预检；未达标立即调整 context 或保留键盘主路径。
+
+验收点：断网后可完成一次语音测试；原始音频不落盘。
+
+#### 第一天晚上（9–12 小时）
+
+1. 首页真实教堂与绿草视觉落地，加入克制景深视差。
+2. 实现统一转场与 E 切换动效，保证 READY 与动画解耦。
+3. 实现本地档案、JSON 导出和仿真历史。
+
+验收点：所有页面连通，流程可在 5–7 分钟内完成。
+
+#### 第二天上午（12–15 小时）
+
+1. 报告、7 天趋势、30 天详情、风险文案。
+2. 完成关键集成测试、物理尺核验、目标机器性能检查。
+3. 制作演示脚本：离线证明、语音识别、动态视标、左右眼报告、历史趋势。
+
+验收点：演示机冷启动后连续完整跑两遍；第二遍不依赖网络。
+
+### 13. Demo script
+
+1. 首页说明目标用户与非医疗定位。
+2. 断开网络，展示模型仍可运行。
+3. 用实体尺核对 50 mm 线，再量出 2 米。
+4. 说“确认”，完成倒计时。
+5. 用上下左右语音展示随机 E、自适应变化和动效安全边界。
+6. 完成左右眼，展示本次结果与 7 天趋势。
+7. 打开 30 天详情，解释 demo/real 数据隔离和本地隐私。
+8. 最后明确 99% 是目标设备实测门槛，不是未经验证的宣传数字。
+
+## NON-GOALS
+
+- 不测量或推断屈光度、散光、眼轴、色觉、对比敏感度或眼病。
+- 不替代 5 米临床视力检查，也不声称达到医疗器械认证。
+- 不实现视差测距、摄像头姿态/距离识别或多距离自动换算。
+- 不实现真实登录、云端数据库、跨设备同步、家长账号或医生后台。
+- 不支持 Safari、手机、平板、外接显示器和任意 PPI 屏幕。
+- 不在 MVP 内训练新语音模型；仅创建受限语义 context 并验证现成引擎。
+- 不把效果图中的 E 当作正式视标资产。
+
+## OPEN QUESTIONS
+
+以下问题不阻止状态机和 UI 开发，但必须在现场语音验收或正式部署前关闭：
+
+1. **Picovoice 授权与 AccessKey**：团队需创建账号、确认黑客松/后续部署许可，并提供不提交 Git 的演示 Key。
+2. **普通话 Rhino context**：需要在 Picovoice Console 生成 WebAssembly `.rhn` 文件，并在目标机器离线验证。
+3. **99% 实测**：厂商基准不能替代 2 米 MacBook 麦克风测试；必须执行至少 1000 条主验收集。
+4. **参考照片权利**：用户提供的冰岛教堂图片只用于建筑与绿地视觉参考；生产站点不得直接使用来源与授权不明的照片。当前效果图是生成式设计稿。
+5. **团队 Logo**：效果图使用临时房屋图标；正式矢量 Logo、团队名和商标权需由团队确认。
+6. **精确机型**：不同年份 13.6 英寸 MacBook Air 均需现场确认 2560×1664、224 ppi、DPR=2 和 Chrome 100%。
+
+## HANDOFF
+
+当前设计已经具备直接实现条件，但语音路径需以 Adapter 隔离：先实现并测试键盘可用的完整 MVP，再接入 Rhino。下一实施顺序应为：
+
+1. `tdd-workflow`：先写尺寸公式、状态机、风险规则与存储测试。
+2. 页面与动效实现：严格遵守 READY 与动画分离的不变量。
+3. `verification-loop`：目标 MacBook Air 上做 50 mm 物理校准、2 米语音测试、断网运行和两次完整演示回归。
+
+在 Picovoice AccessKey/context 缺失时，项目仍可实现完整键盘 MVP；不得以假语音识别结果冒充离线 99% 验收通过。
+
+---
+
+## 参考资料
+
+- [GB/T 11533-2011 标准信息（国家标准全文公开系统）](https://openstd.samr.gov.cn/bzgk/std/newGbInfo?hcno=A9F9E03A346211223DE34421A85CA1C8)
+- [GB/T 11533-2011 标准 PDF（国家卫生健康委员会）](https://www.nhc.gov.cn/zwgkzt/pqt/201207/55375/files/20127f1102054853aa8891d364154c29.pdf)
+- [MacBook Air 显示屏技术规格（Apple 中国）](https://www.apple.com.cn/macbook-air/specs/)
+- [Rhino Speech-to-Intent 准确率与限制](https://picovoice.ai/docs/faq/rhino/)
+- [Rhino Web Quick Start](https://picovoice.ai/docs/quick-start/rhino-web/)
+- [Rhino Model API 与中文/WebAssembly 支持](https://picovoice.ai/docs/model-api/rhino/)
+- [sherpa-onnx 自定义关键词识别](https://k2-fsa.github.io/sherpa/onnx/kws/index.html)
+- [Vosk 中文模型错误率](https://alphacephei.com/vosk/models)
+- [2 米家庭视力测试验证研究](https://pmc.ncbi.nlm.nih.gov/articles/PMC6701871/)
+- [0.2 logMAR 与测试重测变化研究](https://pubmed.ncbi.nlm.nih.gov/12882770/)
