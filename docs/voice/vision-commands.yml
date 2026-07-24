@@ -1,0 +1,13 @@
+context:
+  expressions:
+    direction:
+      - $direction:direction
+    confirm:
+      - 确认
+      - 好
+slots:
+  direction:
+    - 上
+    - 下
+    - 左
+    - 右

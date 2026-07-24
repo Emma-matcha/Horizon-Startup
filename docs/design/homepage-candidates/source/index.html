@@ -1,0 +1,455 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>红房子首页候选视觉稿</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --ink: #171815;
+        --muted: #5f625d;
+        --paper: #f7f5ee;
+        --red: #c9231b;
+        --red-dark: #a81712;
+      }
+
+      * { box-sizing: border-box; }
+
+      html,
+      body {
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        overflow: hidden;
+        font-family: "PingFang SC", "Hiragino Sans GB", "Noto Sans CJK SC", sans-serif;
+        color: var(--ink);
+        background: var(--paper);
+      }
+
+      button { font: inherit; }
+
+      .page {
+        position: relative;
+        width: 100vw;
+        height: 100vh;
+        isolation: isolate;
+      }
+
+      .scene,
+      .wash,
+      .texture {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+      }
+
+      .scene {
+        z-index: -3;
+        object-fit: cover;
+      }
+
+      .wash { z-index: -2; pointer-events: none; }
+
+      .texture {
+        z-index: -1;
+        opacity: 0.08;
+        pointer-events: none;
+        background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.75' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.2'/%3E%3C/svg%3E");
+      }
+
+      .site-header {
+        position: absolute;
+        top: 42px;
+        left: 58px;
+        right: 58px;
+        z-index: 10;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+
+      .brand {
+        display: inline-flex;
+        align-items: center;
+        gap: 13px;
+        color: var(--ink);
+        font-family: "Songti SC", "STSong", serif;
+        font-size: 24px;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+      }
+
+      .brand-mark { width: 40px; height: 46px; color: #ed1b24; }
+
+      .login {
+        min-width: 96px;
+        min-height: 46px;
+        padding: 0 25px;
+        border: 0;
+        border-radius: 999px;
+        color: #fff;
+        background: #161714;
+        font-size: 17px;
+        font-weight: 600;
+        letter-spacing: 0.08em;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+      }
+
+      .eyebrow {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin: 0 0 22px;
+        font-size: 14px;
+        font-weight: 650;
+        letter-spacing: 0.18em;
+      }
+
+      .eyebrow::before {
+        content: "";
+        width: 34px;
+        height: 2px;
+        background: var(--red);
+      }
+
+      h1 { margin: 0; font-weight: 700; }
+
+      .subcopy {
+        margin: 24px 0 34px;
+        color: #3f423d;
+        font-size: 19px;
+        line-height: 1.75;
+        letter-spacing: 0.08em;
+      }
+
+      .primary {
+        display: inline-flex;
+        min-width: 202px;
+        min-height: 62px;
+        align-items: center;
+        justify-content: center;
+        gap: 16px;
+        padding: 0 31px;
+        border: 0;
+        border-radius: 999px;
+        color: #fff;
+        background: var(--red);
+        font-size: 19px;
+        font-weight: 650;
+        letter-spacing: 0.08em;
+        box-shadow: 0 14px 28px rgba(145, 22, 16, 0.22);
+      }
+
+      .primary svg { width: 20px; height: 20px; }
+
+      .disclaimer {
+        color: rgba(24, 25, 22, 0.74);
+        font-size: 12px;
+        line-height: 1.55;
+        letter-spacing: 0.04em;
+      }
+
+      .only-a,
+      .only-b,
+      .only-c { display: none; }
+
+      body[data-view="a"] .only-a,
+      body[data-view="b"] .only-b,
+      body[data-view="c"] .only-c { display: block; }
+
+      /* A — 远野定焦 */
+      body[data-view="a"] .scene { content: url("../backgrounds/01-quiet-horizon-bg.png"); }
+
+      body[data-view="a"] .wash {
+        background:
+          linear-gradient(90deg, rgba(244, 248, 241, 0.66) 0%, rgba(244, 248, 241, 0.30) 32%, rgba(244, 248, 241, 0) 58%),
+          linear-gradient(0deg, rgba(7, 19, 8, 0.16) 0%, transparent 23%);
+      }
+
+      .a-main {
+        position: absolute;
+        top: 218px;
+        left: 110px;
+        width: 650px;
+      }
+
+      .a-main h1 {
+        width: 640px;
+        font-family: "Songti SC", "STSong", serif;
+        font-size: 78px;
+        line-height: 1.16;
+        letter-spacing: 0.02em;
+        text-shadow: 0 1px 18px rgba(246, 249, 244, 0.38);
+      }
+
+      .a-main .subcopy { margin-left: 3px; }
+
+      .a-meta {
+        position: absolute;
+        left: 110px;
+        bottom: 58px;
+        display: flex;
+        align-items: center;
+        gap: 24px;
+        padding: 14px 20px;
+        border: 1px solid rgba(255, 255, 255, 0.68);
+        border-radius: 999px;
+        color: #fff;
+        background: rgba(25, 42, 22, 0.62);
+        box-shadow: 0 10px 34px rgba(0, 0, 0, 0.10);
+        backdrop-filter: blur(14px);
+        font-size: 14px;
+        font-weight: 550;
+        letter-spacing: 0.08em;
+      }
+
+      .a-meta span + span::before {
+        content: "";
+        display: inline-block;
+        width: 4px;
+        height: 4px;
+        margin: 0 24px 3px 0;
+        border-radius: 50%;
+        background: rgba(255, 255, 255, 0.74);
+      }
+
+      .a-note { position: absolute; right: 58px; bottom: 62px; color: rgba(255, 255, 255, 0.9); text-align: right; }
+
+      /* B — 清晰分界 */
+      body[data-view="b"] .scene { content: url("../backgrounds/02-focus-boundary-bg.png"); }
+
+      body[data-view="b"] .wash {
+        background:
+          linear-gradient(90deg, rgba(249, 247, 240, 0.99) 0%, rgba(249, 247, 240, 0.98) 39%, rgba(249, 247, 240, 0.84) 44%, rgba(249, 247, 240, 0) 56%),
+          linear-gradient(0deg, rgba(16, 28, 14, 0.2) 0%, transparent 30%);
+      }
+
+      body[data-view="b"] .site-header { right: 52px; }
+      body[data-view="b"] .login { color: var(--ink); background: rgba(255, 255, 255, 0.78); border: 1px solid rgba(23, 24, 21, 0.26); box-shadow: none; }
+
+      .b-rule {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        left: 44%;
+        width: 1px;
+        background: linear-gradient(180deg, transparent 5%, rgba(25, 26, 23, 0.22) 15%, rgba(25, 26, 23, 0.12) 75%, transparent 94%);
+      }
+
+      .b-main {
+        position: absolute;
+        top: 184px;
+        left: 86px;
+        width: 570px;
+      }
+
+      .b-index {
+        position: absolute;
+        top: 198px;
+        right: 54px;
+        color: rgba(255, 255, 255, 0.92);
+        font-size: 13px;
+        font-weight: 700;
+        letter-spacing: 0.16em;
+        text-align: right;
+        text-shadow: 0 1px 6px rgba(0, 0, 0, 0.25);
+      }
+
+      .b-main h1 {
+        font-size: 78px;
+        line-height: 1.03;
+        letter-spacing: -0.035em;
+      }
+
+      .b-main h1 span { color: var(--red); }
+
+      .b-main .subcopy {
+        max-width: 450px;
+        margin-top: 28px;
+        margin-bottom: 30px;
+        font-size: 17px;
+      }
+
+      .b-helper {
+        margin-top: 17px;
+        color: #5d605a;
+        font-size: 13px;
+        letter-spacing: 0.05em;
+      }
+
+      .b-process {
+        position: absolute;
+        left: 86px;
+        bottom: 54px;
+        display: grid;
+        grid-template-columns: repeat(3, 145px);
+        gap: 25px;
+      }
+
+      .b-step { border-top: 1px solid rgba(23, 24, 21, 0.28); padding-top: 13px; }
+      .b-step strong { display: block; margin-bottom: 6px; color: var(--red); font-size: 12px; letter-spacing: 0.14em; }
+      .b-step span { font-size: 14px; font-weight: 600; letter-spacing: 0.06em; }
+
+      .b-note { position: absolute; right: 54px; bottom: 54px; color: rgba(255, 255, 255, 0.92); text-align: right; text-shadow: 0 1px 7px rgba(0, 0, 0, 0.32); }
+
+      /* C — 回到红房子 */
+      body[data-view="c"] .scene { content: url("../backgrounds/03-return-home-bg.png"); }
+
+      body[data-view="c"] .wash {
+        background:
+          linear-gradient(90deg, rgba(254, 250, 239, 0.56) 0%, rgba(254, 250, 239, 0.17) 44%, rgba(254, 250, 239, 0) 66%),
+          linear-gradient(0deg, rgba(26, 38, 18, 0.15) 0%, transparent 30%);
+      }
+
+      body[data-view="c"] .login { background: rgba(250, 247, 237, 0.88); color: var(--ink); box-shadow: 0 8px 28px rgba(73, 58, 31, 0.12); }
+
+      .c-card {
+        position: absolute;
+        top: 166px;
+        left: 72px;
+        width: 570px;
+        min-height: 642px;
+        padding: 54px 58px 40px;
+        border: 1px solid rgba(255, 255, 255, 0.76);
+        border-radius: 34px;
+        background: rgba(250, 247, 237, 0.86);
+        box-shadow: 0 34px 90px rgba(63, 54, 33, 0.20);
+        backdrop-filter: blur(18px);
+      }
+
+      .c-card .eyebrow { color: #646157; }
+
+      .c-card h1 {
+        font-size: 66px;
+        line-height: 1.12;
+        letter-spacing: -0.02em;
+      }
+
+      .c-card .subcopy { margin-top: 22px; margin-bottom: 27px; font-size: 17px; }
+
+      .trust-points {
+        display: flex;
+        gap: 13px;
+        margin-top: 32px;
+      }
+
+      .trust-point {
+        display: flex;
+        min-width: 0;
+        flex: 1;
+        align-items: center;
+        gap: 9px;
+        padding: 12px 13px;
+        border: 1px solid rgba(30, 34, 26, 0.11);
+        border-radius: 14px;
+        color: #4b4e47;
+        background: rgba(255, 255, 255, 0.42);
+        font-size: 12px;
+        font-weight: 600;
+        line-height: 1.4;
+      }
+
+      .trust-point svg { width: 21px; height: 21px; flex: 0 0 auto; color: var(--red); }
+
+      .c-card .disclaimer { position: absolute; left: 58px; right: 58px; bottom: 32px; }
+
+      .c-distance {
+        position: absolute;
+        right: 62px;
+        bottom: 56px;
+        display: flex;
+        align-items: baseline;
+        gap: 12px;
+        color: #fff;
+        text-shadow: 0 2px 14px rgba(0, 0, 0, 0.34);
+      }
+
+      .c-distance strong { font-family: Georgia, serif; font-size: 60px; line-height: 1; font-weight: 500; }
+      .c-distance span { font-size: 15px; font-weight: 650; letter-spacing: 0.12em; }
+
+      body:not([data-view="a"]) .only-a,
+      body:not([data-view="b"]) .only-b,
+      body:not([data-view="c"]) .only-c { display: none !important; }
+
+      body[data-view="a"] .a-meta { display: flex; }
+      body[data-view="b"] .b-process { display: grid; }
+      body[data-view="c"] .c-distance { display: flex; }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <img class="scene" alt="" />
+      <div class="wash"></div>
+      <div class="texture"></div>
+
+      <header class="site-header">
+        <div class="brand">
+          <svg class="brand-mark" viewBox="0 0 40 46" fill="none" aria-hidden="true">
+            <path d="M4 18.5 20 5l16 13.5V41H4V18.5Z" stroke="currentColor" stroke-width="3.4" stroke-linejoin="round"/>
+            <path d="M13.2 28.7c0-4.2 3-7.4 6.8-7.4s6.8 3.2 6.8 7.4c0 3.2-1.7 5.4-4.3 6.6V41h-5v-5.7c-2.6-1.2-4.3-3.4-4.3-6.6Z" fill="currentColor"/>
+            <circle cx="20" cy="28.6" r="2.5" fill="#fff"/>
+          </svg>
+          <span>红房子</span>
+        </div>
+        <button class="login" type="button">登录</button>
+      </header>
+
+      <section class="only-a a-main">
+        <p class="eyebrow">家庭视力筛查 · 桌面端</p>
+        <h1>向清晰，<br />再近一点。</h1>
+        <p class="subcopy">两米距离，完成一次安静、专注的视力筛查。</p>
+        <button class="primary" type="button">
+          开始检查
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m9 5 7 7-7 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+      </section>
+      <div class="only-a a-meta"><span>2 米距离</span><span>约 5 分钟</span><span>记录仅存本机</span></div>
+      <p class="only-a disclaimer a-note">仅用于家庭视力筛查<br />不替代专业验光或医疗诊断</p>
+
+      <div class="only-b b-rule"></div>
+      <section class="only-b b-main">
+        <p class="eyebrow">RED HOUSE / VISION SCREENING</p>
+        <h1>向<span>清晰</span>，<br />再近一点</h1>
+        <p class="subcopy">两米距离，一次安静专注的视力筛查。<br />看见变化，也看见安心。</p>
+        <button class="primary" type="button">开始检查</button>
+        <p class="b-helper">开始前将先确认屏幕与 2 米距离</p>
+      </section>
+      <div class="only-b b-index">02 M / CLEAR VIEW<br />家庭视力筛查</div>
+      <div class="only-b b-process">
+        <div class="b-step"><strong>01</strong><span>环境确认</span></div>
+        <div class="b-step"><strong>02</strong><span>分眼测试</span></div>
+        <div class="b-step"><strong>03</strong><span>趋势记录</span></div>
+      </div>
+      <p class="only-b disclaimer b-note">仅用于家庭视力筛查<br />不替代专业验光或医疗诊断</p>
+
+      <section class="only-c c-card">
+        <p class="eyebrow">给眼睛一次安静的确认</p>
+        <h1>向清晰，<br />再近一点</h1>
+        <p class="subcopy">在熟悉的家里，用两米距离完成一次专注的视力筛查。</p>
+        <button class="primary" type="button">
+          开始检查
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m9 5 7 7-7 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <div class="trust-points">
+          <div class="trust-point">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3 5 6v5c0 4.8 2.8 8.1 7 10 4.2-1.9 7-5.2 7-10V6l-7-3Z" stroke="currentColor" stroke-width="1.8"/><path d="m9 12 2 2 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <span>无需上传<br />原始音频</span>
+          </div>
+          <div class="trust-point">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="4" y="5" width="16" height="14" rx="3" stroke="currentColor" stroke-width="1.8"/><path d="M8 9h8M8 13h5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+            <span>筛查记录<br />仅存本机</span>
+          </div>
+        </div>
+        <p class="disclaimer">仅用于家庭视力筛查，不替代专业验光或医疗诊断。</p>
+      </section>
+      <div class="only-c c-distance"><strong>2m</strong><span>安静 · 专注 · 清晰</span></div>
+    </main>
+
+    <script>
+      const view = new URLSearchParams(window.location.search).get("view");
+      document.body.dataset.view = ["a", "b", "c"].includes(view) ? view : "a";
+    </script>
+  </body>
+</html>

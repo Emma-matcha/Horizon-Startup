@@ -22,3 +22,7 @@
 
 生成方式：OpenAI 内置 `imagegen`。最终图片由多轮生成与定向编辑得到，源照片只作为建筑和绿地参考，没有复制到项目中。
 
+## 实机验收图
+
+- `../qa/08-live-home.png`：实际 React 首页（Desktop Chrome）。
+- `../qa/09-live-report.png`：完整左右眼 E2E 后的实际报告页。

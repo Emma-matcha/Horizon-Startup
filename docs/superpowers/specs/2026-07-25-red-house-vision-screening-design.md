@@ -39,8 +39,8 @@
 ### 信任边界
 
 - 浏览器可读取麦克风 PCM 流，但不得持久化音频、上传音频或在测试结束后继续监听。
-- Rhino 模型与上下文可本地加载；创建模型和获取 AccessKey 需要 Picovoice 的外部服务。AccessKey 不得提交到 Git。
-- 客户端网页无法真正保守长期密钥；现场演示可使用本机 `.env.local`，正式部署前必须与供应商确认 Web AccessKey 的安全与授权方案。
+- Picovoice 账号当前无可用权限，MVP 不再依赖 AccessKey 或 Rhino context；离线语音按[备用能力契约](./2026-07-25-offline-voice-fallback-capability.md)执行。
+- 语音模型必须作为同源静态资源预装或缓存；浏览器端不得包含任何供应商密钥。
 - 仿真数据和真实数据必须通过 `source: "demo" | "real"` 分离，仿真重置不得覆盖真实记录。
 
 ## IMPLEMENTATION CONTRACT
@@ -224,19 +224,15 @@ COUNTDOWN → TRANSITION_IN → READY → LISTENING → EVALUATE
 
 #### 5.1 Selected engine
 
-MVP 采用 **Picovoice Rhino Web (WASM)**，原因：
+Picovoice 账号当前没有所需权限，原 Rhino 路线停止作为交付依赖。MVP 使用厂商无关 Voice Adapter，并执行两级备用方案：
 
-- 支持普通话与 WebAssembly 浏览器运行。
-- 面向受限语义域直接输出 intent，适合“上、下、左、右、确认”五个命令，不依赖大语言模型。
-- 官方说明其干净环境 intent 准确率超过 99%，9 dB 信噪比噪声环境约 97%；该数字是厂商通用基准，不是本项目已经达到的成绩。[Rhino 准确率说明](https://picovoice.ai/docs/faq/rhino/)
-- Web 快速入门要求 `.rhn` context、普通话 `.pv` 模型和 AccessKey，模型可被缓存到 IndexedDB。[Rhino Web 文档](https://picovoice.ai/docs/quick-start/rhino-web/)
+1. 给 **sherpa-onnx KWS** 两小时浏览器 WASM 技术闸门；通过断网、五命令、准确率、误接受率和延迟门槛后使用。
+2. 技术闸门失败即切换 **Vosk WASM**，使用约 42 MB 中文小模型与“上、下、左、右、确认、未知词”受限词表。
+3. 任一引擎初始化或快速验收失败，自动使用键盘，不阻断双眼流程。
 
-备选：
+完整状态、接口、数据、验收与时间闸门以[离线语音备用能力契约](./2026-07-25-offline-voice-fallback-capability.md)为准。
 
-- **sherpa-onnx KWS**：开源、中文自定义关键词、支持本地推理，但官方当前 KWS 文档重点提供命令行与 Android 路径，Web 集成和本场景 99% 证据不足。[sherpa-onnx KWS](https://k2-fsa.github.io/sherpa/onnx/kws/index.html)
-- **Vosk**：中文小模型约 42 MB，但官方列出的通用中文错误率明显高于本项目目标，不作为主方案。[Vosk 模型表](https://alphacephei.com/vosk/models)
-
-#### 5.2 Rhino context
+#### 5.2 Command scope
 
 ```yaml
 context:
@@ -256,7 +252,7 @@ context:
 - 方向测试只接受 `chooseDirection`；距离页只接受 `confirmDistance`。
 - `isUnderstood=false`、模型未完成 endpointing、过低输入电平或命令不在当前页面时，均不计错。
 - 第一次未理解提示“请再说一次”；连续两次未理解后显示键盘方向键兜底。
-- 原始 PCM 只存在 AudioWorklet/Rhino 内存管线，完成或离开页面立即释放。
+- 原始 PCM 只存在 AudioWorklet/Worker 内存管线，完成或离开页面立即释放。
 
 #### 5.3 Accuracy acceptance tests
 
@@ -344,7 +340,7 @@ type TestRecord = {
 - `localStorage[red-house:v1:profiles]`
 - `localStorage[red-house:v1:records]`
 - `localStorage[red-house:v1:consent]`
-- Rhino 模型由 SDK 缓存于 IndexedDB。
+- 离线语音模型缓存于 Cache Storage 或 IndexedDB，并记录版本与 SHA-256。
 - 提供 JSON 导出与“一键清除”；清除后无法恢复，操作前二次确认。
 
 仿真数据：
@@ -360,7 +356,7 @@ type TestRecord = {
 - Vite + React + TypeScript
 - GSAP：页面和首页景深动效；测试状态机不依赖 GSAP
 - Canvas 2D：E 视标的确定性几何绘制
-- Rhino Web + WebVoiceProcessor：离线普通话 intent
+- sherpa-onnx KWS 或 Vosk WASM：离线普通话命令词；键盘为确定性保底
 - 纯 TypeScript reducer：测试状态机和风险分析
 - localStorage + IndexedDB：本地记录与模型缓存
 - 自定义 SVG 折线图：减少额外图表依赖并完全控制动效
@@ -372,7 +368,7 @@ UI Pages ───────┐
 Motion Director ├──> Test Engine ──> Trial/Event Log
 Device Gate ────┘         │
                            ├── Optotype Generator
-                           ├── Speech Adapter (Rhino / Keyboard)
+                           ├── Voice Adapter (sherpa / Vosk / Keyboard)
                            └── Result + Risk Analyzer
                                       │
                                       └── Local Repository
@@ -404,7 +400,7 @@ Device Gate ────┘         │
 ### 10. Error and recovery behavior
 
 - 麦克风拒绝：解释原因，允许键盘方向键继续，但报告标注 `voiceFallback=true`。
-- Rhino 加载失败：重试一次；仍失败则键盘模式，不阻断 MVP。
+- 语音模型加载失败：重试一次；仍失败则键盘模式，不阻断 MVP。
 - 页面失焦或退出全屏：立即暂停，返回后重新展示同一题，不改变方向且不计错。
 - 页面刷新：当前记录标为 `aborted`，不进入趋势；允许重新开始该眼。
 - 本地数据解析失败：先提供损坏 JSON 下载，再重建空 Schema；不静默丢失。
@@ -424,7 +420,7 @@ Device Gate ────┘         │
 
 #### 集成测试
 
-- 首次授权麦克风→Rhino 加载→说“确认”→倒计时→方向识别→完成两眼→生成报告。
+- 首次加载离线模型→授权麦克风→说“确认”→倒计时→方向识别→完成两眼→生成报告。
 - 拒绝麦克风→键盘兜底完整流程。
 - 中途切换标签页→暂停→恢复当前题。
 - 重载页面→aborted 不进入趋势。
@@ -450,7 +446,7 @@ Device Gate ────┘         │
 
 #### 第一天下午（4–9 小时）
 
-1. 集成 Rhino Adapter、普通话 context、麦克风权限与低置信重说。
+1. 先完成两小时 sherpa-onnx KWS 浏览器闸门；失败即集成 Vosk WASM Adapter、受限词表、麦克风权限与拒识重说。
 2. 完成环境页、倒计时页、测试页和本地事件日志。
 3. 在 2 米距离用至少 3 人进行 150 条快速语音预检；未达标立即调整 context 或保留键盘主路径。
 
@@ -497,22 +493,22 @@ Device Gate ────┘         │
 
 以下问题不阻止状态机和 UI 开发，但必须在现场语音验收或正式部署前关闭：
 
-1. **Picovoice 授权与 AccessKey**：团队需创建账号、确认黑客松/后续部署许可，并提供不提交 Git 的演示 Key。
-2. **普通话 Rhino context**：需要在 Picovoice Console 生成 WebAssembly `.rhn` 文件，并在目标机器离线验证。
-3. **99% 实测**：厂商基准不能替代 2 米 MacBook 麦克风测试；必须执行至少 1000 条主验收集。
+1. **sherpa 浏览器链路**：默认仅投入两小时验证；不通过立即采用 Vosk，不阻塞开发。
+2. **Vosk 浏览器封装**：黑客松固定已验证版本和哈希；长期维护与许可证上线前复核。
+3. **99% 实测**：通用模型指标不能替代 2 米 MacBook 麦克风测试；必须执行至少 1000 条正样本与 200 条负样本。
 4. **参考照片权利**：用户提供的冰岛教堂图片只用于建筑与绿地视觉参考；生产站点不得直接使用来源与授权不明的照片。当前效果图是生成式设计稿。
 5. **团队 Logo**：效果图使用临时房屋图标；正式矢量 Logo、团队名和商标权需由团队确认。
 6. **精确机型**：不同年份 13.6 英寸 MacBook Air 均需现场确认 2560×1664、224 ppi、DPR=2 和 Chrome 100%。
 
 ## HANDOFF
 
-当前设计已经具备直接实现条件，但语音路径需以 Adapter 隔离：先实现并测试键盘可用的完整 MVP，再接入 Rhino。下一实施顺序应为：
+当前设计已经具备直接实现条件，且不再等待 Picovoice 权限。语音路径以厂商无关 Adapter 隔离：先实现并测试键盘可用的完整 MVP，再按备用能力契约选择 sherpa 或 Vosk。下一实施顺序应为：
 
 1. `tdd-workflow`：先写尺寸公式、状态机、风险规则与存储测试。
 2. 页面与动效实现：严格遵守 READY 与动画分离的不变量。
 3. `verification-loop`：目标 MacBook Air 上做 50 mm 物理校准、2 米语音测试、断网运行和两次完整演示回归。
 
-在 Picovoice AccessKey/context 缺失时，项目仍可实现完整键盘 MVP；不得以假语音识别结果冒充离线 99% 验收通过。
+语音引擎未通过正式验收时，项目仍以键盘完成完整 MVP；不得以快速预检或通用模型指标冒充离线 99% 验收通过。
 
 ---
 
@@ -521,10 +517,8 @@ Device Gate ────┘         │
 - [GB/T 11533-2011 标准信息（国家标准全文公开系统）](https://openstd.samr.gov.cn/bzgk/std/newGbInfo?hcno=A9F9E03A346211223DE34421A85CA1C8)
 - [GB/T 11533-2011 标准 PDF（国家卫生健康委员会）](https://www.nhc.gov.cn/zwgkzt/pqt/201207/55375/files/20127f1102054853aa8891d364154c29.pdf)
 - [MacBook Air 显示屏技术规格（Apple 中国）](https://www.apple.com.cn/macbook-air/specs/)
-- [Rhino Speech-to-Intent 准确率与限制](https://picovoice.ai/docs/faq/rhino/)
-- [Rhino Web Quick Start](https://picovoice.ai/docs/quick-start/rhino-web/)
-- [Rhino Model API 与中文/WebAssembly 支持](https://picovoice.ai/docs/model-api/rhino/)
 - [sherpa-onnx 自定义关键词识别](https://k2-fsa.github.io/sherpa/onnx/kws/index.html)
+- [Vosk 离线与动态词表能力](https://alphacephei.com/vosk/)
 - [Vosk 中文模型错误率](https://alphacephei.com/vosk/models)
 - [2 米家庭视力测试验证研究](https://pmc.ncbi.nlm.nih.gov/articles/PMC6701871/)
 - [0.2 logMAR 与测试重测变化研究](https://pubmed.ncbi.nlm.nih.gov/12882770/)
