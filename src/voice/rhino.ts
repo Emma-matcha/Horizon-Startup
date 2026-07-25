@@ -1,11 +1,7 @@
 import type { Direction } from '../domain/optotype'
+import type { VoiceCommand, VoiceController, VoiceState } from './contracts'
 
-export type VoiceCommand = Direction | 'confirm'
-export type VoiceState = 'idle' | 'loading' | 'listening' | 'unavailable' | 'error'
-
-export interface VoiceController {
-  stop: () => Promise<void>
-}
+export type { VoiceCommand, VoiceController, VoiceState } from './contracts'
 
 const directionMap: Record<string, Direction> = {
   上: 'up',
@@ -40,6 +36,7 @@ export async function createRhinoController(
 
   onState('loading')
   try {
+    let consecutiveRejected = 0
     const [{ RhinoWorker }, { WebVoiceProcessor }] = await Promise.all([
       import('@picovoice/rhino-web'),
       import('@picovoice/web-voice-processor'),
@@ -48,12 +45,35 @@ export async function createRhinoController(
       accessKey,
       { publicPath: contextPath, sensitivity: 0.62 },
       (inference) => {
-        if (!inference.isFinalized || !inference.isUnderstood) return
+        if (!inference.isFinalized) return
+        if (!inference.isUnderstood) {
+          consecutiveRejected += 1
+          onState(
+            consecutiveRejected >= 2 ? 'fallback' : 'listening',
+            consecutiveRejected >= 2
+              ? '连续两次未听清，已显示方向按钮'
+              : '未听清，请再说一次',
+          )
+          rhino.reset()
+          return
+        }
         const spokenDirection = inference.slots?.direction
         if (spokenDirection && directionMap[spokenDirection]) {
+          consecutiveRejected = 0
+          onState('listening')
           onCommand(directionMap[spokenDirection])
         } else if (inference.intent === 'confirm') {
+          consecutiveRejected = 0
+          onState('listening')
           onCommand('confirm')
+        } else {
+          consecutiveRejected += 1
+          onState(
+            consecutiveRejected >= 2 ? 'fallback' : 'listening',
+            consecutiveRejected >= 2
+              ? '连续两次未听清，已显示方向按钮'
+              : '未听清，请再说一次',
+          )
         }
         rhino.reset()
       },
@@ -72,6 +92,7 @@ export async function createRhinoController(
     onState('listening')
 
     return {
+      engine: 'rhino',
       stop: async () => {
         await WebVoiceProcessor.unsubscribe(rhino)
         await rhino.release()

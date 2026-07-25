@@ -41,7 +41,12 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json-summary'],
-      include: ['src/domain/**/*.ts', 'src/data/**/*.ts'],
+      include: [
+        'src/domain/**/*.ts',
+        'src/data/**/*.ts',
+        'src/voice/contracts.ts',
+        'src/voice/vosk.ts'
+      ],
       exclude: ['src/main.tsx', 'src/test/**', 'src/**/*.d.ts'],
       thresholds: {
         branches: 80,

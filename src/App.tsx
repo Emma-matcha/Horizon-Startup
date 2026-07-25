@@ -26,8 +26,8 @@ import {
   type EyeTestState,
 } from './domain/testMachine'
 import type { Direction } from './domain/optotype'
-import { useRhinoVoice } from './voice/useRhinoVoice'
-import type { VoiceCommand } from './voice/rhino'
+import type { VoiceCommand, VoiceScope } from './voice/contracts'
+import { useVoiceInput } from './voice/useVoiceInput'
 
 type View =
   | 'home'
@@ -266,6 +266,7 @@ function TestPage({
   answerIndex,
   onAnswer,
   onReady,
+  showDirectionPad,
   voiceState,
 }: {
   eye: Eye
@@ -275,6 +276,7 @@ function TestPage({
   answerIndex: number
   onAnswer: (direction: Direction) => void
   onReady: () => void
+  showDirectionPad: boolean
   voiceState: string
 }) {
   return (
@@ -287,19 +289,23 @@ function TestPage({
         <Optotype className="optotype--animated" direction={direction} level={state.level} scale={scale} />
       </div>
       <p aria-live="polite" className="voice-state">{voiceState}</p>
-      <div className="direction-pad" aria-label="方向回答">
-        {(['up', 'left', 'down', 'right'] as const).map((answer) => (
-          <button
-            aria-label={`缺口向${directionName[answer]}`}
-            className={`direction-pad__${answer}`}
-            key={answer}
-            onClick={() => onAnswer(answer)}
-          >
-            <span aria-hidden="true">{answer === 'up' ? '↑' : answer === 'right' ? '→' : answer === 'down' ? '↓' : '←'}</span>
-          </button>
-        ))}
-      </div>
-      <p className="test-hint">说出方向 · 或使用键盘方向键</p>
+      {showDirectionPad && (
+        <div className="direction-pad" aria-label="方向回答">
+          {(['up', 'left', 'down', 'right'] as const).map((answer) => (
+            <button
+              aria-label={`缺口向${directionName[answer]}`}
+              className={`direction-pad__${answer}`}
+              key={answer}
+              onClick={() => onAnswer(answer)}
+            >
+              <span aria-hidden="true">{answer === 'up' ? '↑' : answer === 'right' ? '→' : answer === 'down' ? '↓' : '←'}</span>
+            </button>
+          ))}
+        </div>
+      )}
+      <p className="test-hint">
+        {showDirectionPad ? '说出方向 · 或使用键盘方向键' : '请直接说出缺口方向'}
+      </p>
     </main>
   )
 }
@@ -508,7 +514,15 @@ export default function App() {
     },
     [handleAnswer, startCountdown, view],
   )
-  const voice = useRhinoVoice(onVoiceCommand)
+  const voiceScope: VoiceScope = view === 'test' ? 'direction-test' : 'distance-confirmation'
+  const voice = useVoiceInput(onVoiceCommand, voiceScope)
+  const stopVoice = voice.stop
+
+  useEffect(() => {
+    if (view === 'home' || view === 'analysis' || view === 'report' || view === 'history') {
+      void stopVoice()
+    }
+  }, [stopVoice, view])
 
   useEffect(() => {
     if (view !== 'countdown') return
@@ -540,12 +554,14 @@ export default function App() {
   }, [handleAnswer, view])
 
   const voiceLabel = useMemo(() => {
-    if (voice.state === 'listening') return '正在本地聆听'
+    if (voice.state === 'listening') {
+      return voice.engine === 'vosk' ? 'Vosk 本地语音已开启' : 'Rhino 本地语音已开启'
+    }
     if (voice.state === 'loading') return '正在加载离线模型'
     if (!voice.configured) return '语音未配置 · 使用键盘'
     if (voice.state === 'error') return voice.detail || '语音暂不可用'
     return '启用离线语音'
-  }, [voice.configured, voice.detail, voice.state])
+  }, [voice.configured, voice.detail, voice.engine, voice.state])
 
   const beginFromHome = () => {
     if (!data.profile.consentAcceptedAt) setShowConsent(true)
@@ -564,7 +580,7 @@ export default function App() {
       case 'countdown':
         return <CountdownPage count={count} eye={eye} />
       case 'test':
-        return <TestPage answerIndex={answers.length} direction={direction} eye={eye} onAnswer={handleAnswer} onReady={() => setSymbolReady(true)} scale={calibrationPx / 220.47} state={eyeState} voiceState={symbolReady ? (voice.state === 'listening' ? '离线语音已开启' : '键盘方向键已就绪') : '视标准备中'} />
+        return <TestPage answerIndex={answers.length} direction={direction} eye={eye} onAnswer={handleAnswer} onReady={() => setSymbolReady(true)} scale={calibrationPx / 220.47} showDirectionPad={voice.state !== 'listening'} state={eyeState} voiceState={symbolReady ? (voice.detail || (voice.state === 'listening' ? '离线语音已开启' : '键盘方向键已就绪')) : '视标准备中'} />
       case 'eyeSwitch':
         return <EyeSwitchPage onContinue={startCountdown} />
       case 'analysis':
