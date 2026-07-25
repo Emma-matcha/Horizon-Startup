@@ -20,6 +20,10 @@ import {
 } from './data/storage'
 import { analyzeTrend, type TrendStatus } from './domain/risk'
 import {
+  DEFAULT_CALIBRATION_CSS_PX,
+  clampCalibrationCssPx,
+} from './domain/calibration'
+import {
   applyEyeAnswer,
   createEyeTestState,
   selectNextDirection,
@@ -155,7 +159,7 @@ function HomePage({
         </button>
       </section>
       <footer className="home__footer">
-        <span>建议 13.6 英寸 MacBook Air · Chrome · 2 米</span>
+        <span>Windows 10/11 或 macOS · Chrome · 2 米</span>
         <span>筛查结果不能替代专业眼科检查或医学诊断</span>
       </footer>
     </main>
@@ -219,15 +223,15 @@ function SetupPage({
         <article className="instruction-card">
           <span className="step-number">02</span>
           <h2>校准屏幕比例</h2>
-          <p>用实体尺测量下方红线，使它刚好等于 50 mm。默认值已按 13.6 英寸 MacBook Air 设置。</p>
+          <p>用实体尺测量下方红线，使它刚好等于 50 mm。校准后不依赖屏幕型号或分辨率。</p>
           <div className="calibration-ruler">
             <div className="calibration-line" style={{ width: `${calibrationPx}px` }} />
             <span>50 mm</span>
           </div>
           <div className="calibration-controls" aria-label="调整校准线长度">
-            <button aria-label="缩短校准线" onClick={() => onCalibration(Math.max(170, calibrationPx - 2))}>−</button>
+            <button aria-label="缩短校准线" onClick={() => onCalibration(clampCalibrationCssPx(calibrationPx - 2))}>−</button>
             <output>{calibrationPx.toFixed(0)} px</output>
-            <button aria-label="加长校准线" onClick={() => onCalibration(Math.min(270, calibrationPx + 2))}>＋</button>
+            <button aria-label="加长校准线" onClick={() => onCalibration(clampCalibrationCssPx(calibrationPx + 2))}>＋</button>
           </div>
         </article>
         <article className="instruction-card">
@@ -236,7 +240,7 @@ function SetupPage({
           <div className="eye-visual" aria-hidden="true"><span /><i /></div>
           <p>先测右眼。轻轻遮住左眼，不要按压眼球。保持环境光均匀、屏幕无反光。</p>
           <div className="device-checks">
-            <span><i />Chrome 桌面端</span><span><i />分辨率 2560×1664</span><span><i />浏览器缩放 100%</span>
+            <span><i />Chrome 桌面端</span><span><i />Windows 显示缩放 100%</span><span><i />浏览器缩放 100%</span>
           </div>
         </article>
       </section>
@@ -268,7 +272,7 @@ function TestPage({
   eye,
   state,
   direction,
-  scale,
+  calibrationPx,
   answerIndex,
   onAnswer,
   onReady,
@@ -278,7 +282,7 @@ function TestPage({
   eye: Eye
   state: EyeTestState
   direction: Direction
-  scale: number
+  calibrationPx: number
   answerIndex: number
   onAnswer: (direction: Direction) => void
   onReady: () => void
@@ -292,7 +296,7 @@ function TestPage({
         <span>{state.level.toFixed(1)}</span>
       </div>
       <div className="symbol-stage" key={`${eye}-${answerIndex}`} onAnimationEnd={onReady}>
-        <Optotype className="optotype--animated" direction={direction} level={state.level} scale={scale} />
+        <Optotype calibrationPx={calibrationPx} className="optotype--animated" direction={direction} level={state.level} />
       </div>
       <p aria-live="polite" className="voice-state">{voiceState}</p>
       {showDirectionPad && (
@@ -443,7 +447,7 @@ export default function App() {
   const [data, setData] = useState<AppData>(() => loadAppData())
   const [showConsent, setShowConsent] = useState(false)
   const [showProfile, setShowProfile] = useState(false)
-  const [calibrationPx, setCalibrationPx] = useState(220.47)
+  const [calibrationPx, setCalibrationPx] = useState(DEFAULT_CALIBRATION_CSS_PX)
   const [count, setCount] = useState(3)
   const [eye, setEye] = useState<Eye>('right')
   const [eyeState, setEyeState] = useState<EyeTestState>(() => createEyeTestState())
@@ -588,7 +592,7 @@ export default function App() {
       case 'countdown':
         return <CountdownPage count={count} eye={eye} />
       case 'test':
-        return <TestPage answerIndex={answers.length} direction={direction} eye={eye} onAnswer={handleAnswer} onReady={() => setSymbolReady(true)} scale={calibrationPx / 220.47} showDirectionPad={voice.state !== 'listening'} state={eyeState} voiceState={symbolReady ? (voice.detail || (voice.state === 'listening' ? '离线语音已开启' : '键盘方向键已就绪')) : '视标准备中'} />
+        return <TestPage answerIndex={answers.length} calibrationPx={calibrationPx} direction={direction} eye={eye} onAnswer={handleAnswer} onReady={() => setSymbolReady(true)} showDirectionPad={voice.state !== 'listening'} state={eyeState} voiceState={symbolReady ? (voice.detail || (voice.state === 'listening' ? '离线语音已开启' : '键盘方向键已就绪')) : '视标准备中'} />
       case 'eyeSwitch':
         return <EyeSwitchPage onContinue={startCountdown} />
       case 'analysis':

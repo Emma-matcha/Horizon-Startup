@@ -12,6 +12,22 @@ describe('Red House app', () => {
 
     expect(screen.getByText(/家庭视力筛查与趋势跟踪/)).toBeInTheDocument()
     expect(screen.getByText(/不能替代专业眼科检查/)).toBeInTheDocument()
+    expect(screen.getByText(/Windows 10\/11 或 macOS/)).toBeInTheDocument()
+  })
+
+  it('supports physical calibration for Windows displays', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    await user.click(screen.getByRole('button', { name: '开始筛查' }))
+    await user.click(screen.getByRole('button', { name: '同意并继续' }))
+
+    expect(screen.getByText('Windows 显示缩放 100%')).toBeInTheDocument()
+    expect(screen.getByText(/不依赖屏幕型号或分辨率/)).toBeInTheDocument()
+
+    const shrink = screen.getByRole('button', { name: '缩短校准线' })
+    for (let click = 0; click < 31; click += 1) await user.click(shrink)
+    expect(screen.getByRole('status')).toHaveTextContent('158 px')
   })
 
   it('requires local-data consent before setup', async () => {

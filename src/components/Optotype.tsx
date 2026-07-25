@@ -1,8 +1,11 @@
 import {
   getOptotypeGrid,
-  getOptotypeMetrics,
   type Direction,
 } from '../domain/optotype'
+import {
+  DEFAULT_CALIBRATION_CSS_PX,
+  getCalibratedOptotypeCssPx,
+} from '../domain/calibration'
 
 const directionLabel: Record<Direction, string> = {
   up: '上',
@@ -14,18 +17,18 @@ const directionLabel: Record<Direction, string> = {
 interface OptotypeProps {
   direction: Direction
   level: number
-  scale?: number
+  calibrationPx?: number
   className?: string
 }
 
 export function Optotype({
   direction,
   level,
-  scale = 1,
+  calibrationPx = DEFAULT_CALIBRATION_CSS_PX,
   className = '',
 }: OptotypeProps) {
   const grid = getOptotypeGrid(direction)
-  const size = getOptotypeMetrics(level).cssPx * scale
+  const size = getCalibratedOptotypeCssPx(level, calibrationPx)
 
   return (
     <div

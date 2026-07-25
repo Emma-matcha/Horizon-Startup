@@ -2,7 +2,7 @@
 
 状态：已实施（Vosk 离线主通道 + Web Speech 在线备用 + 键盘保底）
 日期：2026-07-25
-适用版本：一天半黑客松 MVP，13.6 英寸 MacBook Air，桌面 Chrome
+适用版本：一天半黑客松 MVP，Windows 10/11 或 macOS 演示机，桌面 Chrome
 
 ## CAPABILITY
 
@@ -164,6 +164,6 @@ type VoiceTelemetry = {
 1. 用 `tdd-workflow` 先把当前 Rhino 类型改成厂商无关 Adapter，并补齐状态机与 fallback 测试。
 2. 执行 2 小时 sherpa-onnx 浏览器 KWS spike；按闸门自动决定 sherpa 或 Vosk。
 3. 接入选定引擎并运行 100 条快速预检；未达标时将 `VITE_VOICE_ENGINE` 固定为 `keyboard`。
-4. 用 `verification-loop` 在目标 MacBook Air、2 米距离、断网条件完成正式 1000+200 条验收。
+4. 用 `verification-loop` 在目标 Windows 与 macOS 演示机、2 米距离、断网条件下分别完成正式 1000+200 条验收。
 
 交付定义：无论语音引擎是否通过，本轮必须交付可完整完成双眼测试的键盘路径；只有通过本机正式验收，语音才升级为默认输入并允许声明实测准确率。

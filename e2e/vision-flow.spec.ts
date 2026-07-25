@@ -11,7 +11,19 @@ test('home presents the approved photoreal red-house direction', async ({ page }
     /church-meadow-hero\.jpg/,
   )
   await expect(page.getByText(/不能替代专业眼科检查/)).toBeVisible()
+  await expect(page.getByText(/Windows 10\/11 或 macOS/)).toBeVisible()
   await page.screenshot({ path: 'docs/design/qa/08-live-home.png' })
+})
+
+test('offers physical screen calibration for Windows displays', async ({ page }) => {
+  const app = new VisionPage(page)
+  await app.goto()
+  await app.enterScreening()
+
+  await expect(page.getByText('Windows 显示缩放 100%')).toBeVisible()
+  await expect(page.getByText(/不依赖屏幕型号或分辨率/)).toBeVisible()
+  await page.getByRole('button', { name: '缩短校准线' }).click({ clickCount: 31 })
+  await expect(page.getByRole('status')).toHaveText('158 px')
 })
 
 test('starts the disclosed online voice fallback when Chrome exposes Web Speech', async ({
