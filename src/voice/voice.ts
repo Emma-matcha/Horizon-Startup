@@ -12,7 +12,7 @@ import { resolveEmbeddedVoskModelPath } from './embeddedModel'
 import { createVoskController } from './vosk'
 import { createWebSpeechController, isWebSpeechAvailable } from './webSpeech'
 
-const DEFAULT_VOSK_MODEL_PATH = '/models/vosk-model-small-cn-0.22.tar'
+const DEFAULT_VOSK_MODEL_PATH = '/models/vosk-model-small-cn-0.22.manifest.json'
 
 export function canUseBundledVosk(protocol: string): boolean {
   return protocol !== 'file:'
@@ -21,7 +21,9 @@ export function canUseBundledVosk(protocol: string): boolean {
 function parsePreference(value: string | undefined): VoiceEnginePreference {
   return value === 'vosk' || value === 'web-speech' || value === 'rhino' || value === 'keyboard'
     ? value
-    : 'auto'
+    : value === 'auto'
+      ? 'auto'
+      : 'vosk'
 }
 
 export function readVoiceConfiguration(): {
@@ -57,28 +59,52 @@ export async function createVoiceController(
   const preference = preferenceOverride ?? configuration.preference
   const selectedEngine = resolveVoiceEngine(preference, config)
 
-  if (selectedEngine === 'vosk' && config.voskModelPath) {
-    const modelPath = await resolveEmbeddedVoskModelPath(config.voskModelPath)
-    const controller = await createVoskController(modelPath, onCommand, onState)
-    if (controller || preference !== 'auto') return controller
+  const startVosk = async () => {
+    if (!config.voskModelPath) return null
+    try {
+      onState('loading', '正在加载离线语音模型 · 首次约需 30–60 秒')
+      const modelPath = await resolveEmbeddedVoskModelPath(config.voskModelPath)
+      return createVoskController(modelPath, onCommand, onState)
+    } catch {
+      onState('fallback', '离线语音模型启动失败，已切换键盘模式')
+      return null
+    }
   }
 
-  if (
-    preference === 'web-speech' ||
-    ((selectedEngine === 'web-speech' || preference === 'auto') &&
-      config.webSpeechAvailable)
-  ) {
-    const controller = await createWebSpeechController(onCommand, onState)
-    if (controller || preference !== 'auto') return controller
+  if (preference === 'web-speech') {
+    return config.webSpeechAvailable
+      ? createWebSpeechController(onCommand, onState)
+      : null
   }
+
+  if (preference === 'vosk') return startVosk()
 
   const canUseRhino = Boolean(
     config.rhinoAccessKey && config.rhinoContextPath && config.rhinoModelPath,
   )
-  if ((selectedEngine === 'rhino' || preference === 'auto') && canUseRhino) {
+
+  if (preference === 'rhino') {
+    return canUseRhino
+      ? createRhinoController(onCommand, onState)
+      : null
+  }
+
+  if (preference === 'auto' && config.webSpeechAvailable) {
+    const controller = await createWebSpeechController(onCommand, onState)
+    if (controller) return controller
+  }
+
+  if (preference === 'auto' && config.voskModelPath) {
+    const controller = await startVosk()
+    if (controller) return controller
+  }
+
+  if (preference === 'auto' && canUseRhino) {
     return createRhinoController(onCommand, onState)
   }
 
-  onState('unavailable', '离线语音未就绪，键盘方向键可完整测试')
+  if (selectedEngine === 'keyboard') {
+    onState('unavailable', '语音未就绪，键盘方向键可完整测试')
+  }
   return null
 }

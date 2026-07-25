@@ -14,6 +14,8 @@ export type VoiceState =
 
 export interface VoiceController {
   readonly engine: Exclude<VoiceEngineId, 'keyboard'>
+  pause: () => Promise<void>
+  resume: () => Promise<void>
   stop: () => Promise<void>
 }
 
@@ -31,10 +33,33 @@ const commandMap: Record<string, VoiceCommand> = {
   左: 'left',
   右: 'right',
   确认: 'confirm',
+  ok: 'confirm',
+  欧克: 'confirm',
+  哦可: 'confirm',
+  欧凯: 'confirm',
+  奥凯: 'confirm',
+  欧: 'confirm',
+  哦: 'confirm',
+  喔: 'confirm',
+  噢: 'confirm',
+  欧了: 'confirm',
+  哦了: 'confirm',
+  好: 'confirm',
+  好的: 'confirm',
+  好了: 'confirm',
+  我好了: 'confirm',
+  可以: 'confirm',
+  可以了: 'confirm',
+  准备好: 'confirm',
+  准备好了: 'confirm',
+  我准备好了: 'confirm',
+  okay: 'confirm',
 }
 
 export function normalizeVoiceCommand(spoken: string): VoiceCommand | null {
-  const compact = spoken.replace(/\s+/g, '')
+  const compact = spoken
+    .replace(/[\s，。！？、,.!?]+/g, '')
+    .toLocaleLowerCase('zh-CN')
   return commandMap[compact] ?? null
 }
 
@@ -57,8 +82,8 @@ export function resolveVoiceEngine(
     return config.webSpeechAvailable ? 'web-speech' : 'keyboard'
   }
   if (preference === 'rhino') return hasRhino ? 'rhino' : 'keyboard'
-  if (hasVosk) return 'vosk'
   if (config.webSpeechAvailable) return 'web-speech'
+  if (hasVosk) return 'vosk'
   if (hasRhino) return 'rhino'
   return 'keyboard'
 }

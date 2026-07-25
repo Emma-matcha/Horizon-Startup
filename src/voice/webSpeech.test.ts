@@ -120,6 +120,23 @@ describe('Web Speech online fallback', () => {
     expect(runtime.scheduleRestart).toHaveBeenCalledOnce()
   })
 
+  it('pauses prompt feedback without destroying the controller and resumes afterward', async () => {
+    const recognition = createRecognition()
+    const controller = await createWebSpeechController(
+      vi.fn(),
+      vi.fn(),
+      createRuntime(recognition),
+    )
+
+    await controller?.pause()
+    expect(recognition.abort).toHaveBeenCalledOnce()
+
+    await controller?.resume()
+    expect(recognition.start).toHaveBeenCalledTimes(2)
+
+    await controller?.stop()
+  })
+
   it('fails safely when offline or unsupported', async () => {
     const offlineState = vi.fn()
     const offlineRuntime = createRuntime(createRecognition())

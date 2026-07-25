@@ -105,6 +105,7 @@ export async function createWebSpeechController(
   recognition.maxAlternatives = 1
 
   let stopped = false
+  let paused = false
   let restartTimer: number | null = null
   let rejectedCount = 0
 
@@ -139,12 +140,12 @@ export async function createWebSpeechController(
       rejectResult()
       return
     }
-    if (stopped && event.error === 'aborted') return
+    if ((stopped || paused) && event.error === 'aborted') return
     stopped = true
     onState('error', errorCopy(event.error))
   }
   recognition.onend = () => {
-    if (stopped || !runtime.isOnline()) return
+    if (stopped || paused || !runtime.isOnline()) return
     restartTimer = runtime.scheduleRestart(() => {
       if (stopped) return
       try {
@@ -166,6 +167,26 @@ export async function createWebSpeechController(
 
   return {
     engine: 'web-speech',
+    pause: async () => {
+      if (stopped || paused) return
+      paused = true
+      if (restartTimer !== null) {
+        runtime.cancelRestart(restartTimer)
+        restartTimer = null
+      }
+      recognition.abort()
+      onState('loading', '正在播报提示…')
+    },
+    resume: async () => {
+      if (stopped || !paused) return
+      paused = false
+      try {
+        recognition.start()
+      } catch {
+        stopped = true
+        onState('error', '在线语音暂不可用，键盘方向键仍可使用')
+      }
+    },
     stop: async () => {
       if (stopped) return
       stopped = true

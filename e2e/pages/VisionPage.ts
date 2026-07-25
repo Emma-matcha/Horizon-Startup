@@ -14,21 +14,22 @@ export class VisionPage {
     await this.page.goto(url)
     await this.page.evaluate(() => localStorage.clear())
     await this.page.reload()
-    await expect(this.page.getByRole('heading', { name: /让每一次看清/ })).toBeVisible()
+    await expect(this.page.getByRole('heading', { name: 'Red House' })).toBeVisible()
   }
 
   async enterScreening() {
-    await this.page.getByRole('button', { name: '开始筛查' }).click()
+    await this.page.getByRole('button', { name: '开始' }).click()
     await expect(this.page.getByRole('dialog')).toBeVisible()
     await this.page.getByRole('button', { name: '同意并继续' }).click()
-    await expect(this.page.getByRole('heading', { name: '先量好两米' })).toBeVisible()
+    await expect(this.page.getByRole('heading', { name: '站到 2 米' })).toBeVisible()
   }
 
   async startEye() {
-    const start = this.page.getByRole('button', {
-      name: /我已站好，开始右眼测试|开始左眼测试/,
-    })
-    await start.click()
+    if (await this.page.getByRole('heading', { name: '站到 2 米' }).isVisible().catch(() => false)) {
+      await this.page.keyboard.press('Enter')
+      await expect(this.page.getByRole('heading', { name: '测试右眼' })).toBeVisible()
+    }
+    await this.page.keyboard.press('Enter')
     await expect(this.page.locator('.optotype')).toBeVisible()
   }
 

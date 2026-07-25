@@ -12,6 +12,11 @@ import { BrandMark } from './components/BrandMark'
 import { Optotype } from './components/Optotype'
 import { TrendChart } from './components/TrendChart'
 import {
+  feedbackKindForAnswer,
+  playFeedbackSound,
+  primeFeedbackAudio,
+} from './audio/feedback'
+import {
   loadAppData,
   saveSession,
   updateProfile,
@@ -20,12 +25,12 @@ import {
 } from './data/storage'
 import {
   loadPreferences,
+  saveFeedbackSoundsEnabled,
   saveReferenceWordsEnabled,
 } from './data/preferences'
 import { analyzeTrend, type TrendStatus } from './domain/risk'
 import {
   DEFAULT_CALIBRATION_CSS_PX,
-  clampCalibrationCssPx,
   getCalibratedOptotypeCssPx,
 } from './domain/calibration'
 import {
@@ -35,21 +40,22 @@ import {
   type EyeTestState,
 } from './domain/testMachine'
 import type { Direction } from './domain/optotype'
-import { selectNextReferenceWord } from './domain/referenceWords'
+import { selectNextReferenceWord, type ReferenceWord } from './domain/referenceWords'
 import {
   getReferenceWordFontCssPx,
   REFERENCE_WORD_FONT_FAMILY,
   REFERENCE_WORD_FONT_WEIGHT,
 } from './domain/referenceWordSizing'
-import type { VoiceCommand, VoiceScope } from './voice/contracts'
+import type { VoiceCommand, VoiceEnginePreference, VoiceScope, VoiceState } from './voice/contracts'
+import { speakInstruction, stopInstruction } from './voice/prompts'
 import { useVoiceInput } from './voice/useVoiceInput'
 
 type View =
   | 'home'
   | 'setup'
+  | 'eyeGuide'
   | 'countdown'
   | 'test'
-  | 'eyeSwitch'
   | 'analysis'
   | 'report'
   | 'history'
@@ -78,6 +84,10 @@ const directionKey: Record<string, Direction> = {
   ArrowLeft: 'left',
 }
 
+const DISTANCE_PROMPT = '请站到两米外。准备好后，请作答。'
+const RIGHT_EYE_PROMPT = '请遮住左眼，接下来测试右眼。准备好后，请作答。'
+const LEFT_EYE_PROMPT = '请遮住右眼，接下来测试左眼。准备好后，请作答。'
+
 const riskCopy: Record<TrendStatus, { title: string; copy: string }> = {
   insufficient: {
     title: '继续积累记录',
@@ -101,6 +111,17 @@ const isTestMode = () =>
   typeof window !== 'undefined' &&
   new URLSearchParams(window.location.search).has('test')
 
+function voicePreferenceFromUrl(): VoiceEnginePreference | undefined {
+  if (typeof window === 'undefined') return undefined
+  const preference = new URLSearchParams(window.location.search).get('voice')
+  return preference === 'vosk' ||
+    preference === 'web-speech' ||
+    preference === 'rhino' ||
+    preference === 'keyboard'
+    ? preference
+    : undefined
+}
+
 function createSessionId() {
   return globalThis.crypto?.randomUUID?.() ?? `screening-${Date.now()}`
 }
@@ -109,14 +130,32 @@ function usePageMotion(view: View) {
   const ref = useRef<HTMLElement>(null)
   useEffect(() => {
     const element = ref.current
-    if (!element || matchMedia('(prefers-reduced-motion: reduce)').matches) return
+    if (
+      !element ||
+      view === 'home' ||
+      matchMedia('(prefers-reduced-motion: reduce)').matches
+    ) return
     let active = true
     void import('gsap').then(({ gsap }) => {
       if (!active) return
       gsap.fromTo(
         element,
-        { opacity: 0, y: 18, filter: 'blur(8px)' },
-        { opacity: 1, y: 0, filter: 'blur(0px)', duration: 0.72, ease: 'expo.out' },
+        {
+          opacity: 0,
+          y: 28,
+          scale: 0.985,
+          filter: 'blur(14px)',
+          clipPath: 'inset(5% 0 0 0 round 24px)',
+        },
+        {
+          opacity: 1,
+          y: 0,
+          scale: 1,
+          filter: 'blur(0px)',
+          clipPath: 'inset(0% 0 0 0 round 0px)',
+          duration: 0.92,
+          ease: 'power4.out',
+        },
       )
     })
     return () => {
@@ -126,13 +165,12 @@ function usePageMotion(view: View) {
   return ref
 }
 
-function AppHeader({ onHome, onProfile }: { onHome: () => void; onProfile: () => void }) {
+function AppHeader({ onHome }: { onHome: () => void }) {
   return (
     <header className="app-header">
       <button aria-label="返回首页" className="brand-button" onClick={onHome}>
         <BrandMark />
       </button>
-      <button className="text-button" onClick={onProfile}>登录</button>
     </header>
   )
 }
@@ -147,20 +185,125 @@ function HomePage({
   onSettings: () => void
 }) {
   const heroRef = useRef<HTMLElement>(null)
+  const interiorRef = useRef<HTMLDivElement>(null)
+  const windowRef = useRef<HTMLDivElement>(null)
+  const paperWorldRef = useRef<HTMLDivElement>(null)
+  const houseRef = useRef<HTMLImageElement>(null)
+  const titleRef = useRef<HTMLHeadingElement>(null)
+  const taglineRef = useRef<HTMLParagraphElement>(null)
+  const startRef = useRef<HTMLButtonElement>(null)
+
+  useEffect(() => {
+    const hero = heroRef.current
+    const interior = interiorRef.current
+    const windowView = windowRef.current
+    const paperWorld = paperWorldRef.current
+    const house = houseRef.current
+    const title = titleRef.current
+    const tagline = taglineRef.current
+    const start = startRef.current
+    if (!hero || !interior || !windowView || !paperWorld || !house || !title || !tagline || !start) return
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      interior.style.display = 'none'
+      paperWorld.style.opacity = '1'
+      house.style.opacity = '1'
+      title.style.opacity = '.16'
+      tagline.style.opacity = '1'
+      start.style.opacity = '1'
+      hero.dataset.intro = 'complete'
+      return
+    }
+
+    let timeline: GSAPTimeline | undefined
+    let active = true
+    void import('gsap').then(({ gsap }) => {
+      if (!active) return
+      timeline = gsap.timeline({
+        onComplete: () => {
+          gsap.set(house, { clearProps: 'transform,filter' })
+          house.style.opacity = '1'
+          hero.dataset.intro = 'complete'
+        },
+      })
+      timeline
+        .set([title, tagline, start, house], { opacity: 0 })
+        .set(paperWorld, { scale: 1.06, filter: 'blur(5px)' })
+        .fromTo(
+          windowView,
+          { scale: 0.92, y: 14, filter: 'blur(2px)' },
+          { scale: 1.34, y: -8, filter: 'blur(0px)', duration: 1.65, ease: 'power2.inOut' },
+        )
+        .to(windowView, { scale: 4.8, y: -34, duration: 1.15, ease: 'power3.in' })
+        .to(interior, { opacity: 0, duration: 0.42, ease: 'power2.out' }, '-=.38')
+        .to(paperWorld, { scale: 1, filter: 'blur(0px)', duration: 2.05, ease: 'power3.out' }, '-=.42')
+        .fromTo(
+          house,
+          {
+            opacity: 0,
+            scale: 1.06,
+            x: 24,
+            y: 34,
+            rotate: 0,
+            filter: 'blur(10px)',
+            transformOrigin: '78% 50%',
+          },
+          {
+            opacity: 1,
+            scale: 1,
+            x: 0,
+            y: 0,
+            rotate: 0,
+            filter: 'blur(0px)',
+            duration: 1.28,
+            ease: 'power3.out',
+          },
+          '-=.46',
+        )
+        .fromTo(title, { opacity: 0, y: 30 }, { opacity: 1, y: 0, duration: 0.82, ease: 'power3.out' }, '-=.36')
+        .fromTo(tagline, { opacity: 0, y: 18 }, { opacity: 1, y: 0, duration: 0.68, ease: 'power3.out' }, '-=.58')
+        .fromTo(start, { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.62, ease: 'power3.out' }, '-=.5')
+    })
+    return () => {
+      active = false
+      timeline?.kill()
+    }
+  }, [])
+
   const onPointerMove = (event: ReactPointerEvent<HTMLElement>) => {
     if (matchMedia('(prefers-reduced-motion: reduce)').matches) return
-    const x = (event.clientX / window.innerWidth - 0.5) * -10
-    const y = (event.clientY / window.innerHeight - 0.5) * -7
-    heroRef.current?.style.setProperty('--scene-x', `${x}px`)
-    heroRef.current?.style.setProperty('--scene-y', `${y}px`)
+    const pointerX = event.clientX / window.innerWidth - 0.5
+    const pointerY = event.clientY / window.innerHeight - 0.5
+    heroRef.current?.style.setProperty('--far-x', `${pointerX * -7}px`)
+    heroRef.current?.style.setProperty('--far-y', `${pointerY * -4}px`)
+    heroRef.current?.style.setProperty('--mid-x', `${pointerX * -15}px`)
+    heroRef.current?.style.setProperty('--mid-y', `${pointerY * -8}px`)
+    heroRef.current?.style.setProperty('--near-x', `${pointerX * -27}px`)
+    heroRef.current?.style.setProperty('--near-y', `${pointerY * -12}px`)
   }
 
   return (
-    <main className="home" onPointerMove={onPointerMove} ref={heroRef}>
-      <div className="home__scene" aria-hidden="true" />
-      <div className="home__veil" aria-hidden="true" />
+    <main className="home" data-intro="pending" onPointerMove={onPointerMove} ref={heroRef}>
+      <div className="home__interior" ref={interiorRef} aria-hidden="true">
+        <div className="home__interior-glow" />
+        <div className="home__interior-window" ref={windowRef} />
+        <div className="home__interior-wall home__interior-wall--left" />
+        <div className="home__interior-wall home__interior-wall--right" />
+      </div>
+      <div className="home__paper-world" ref={paperWorldRef} aria-hidden="true">
+        <div className="home__paper-sky">
+          <i className="home__paper-sun" />
+          <i className="home__paper-cloud home__paper-cloud--one" />
+          <i className="home__paper-cloud home__paper-cloud--two" />
+        </div>
+        <div className="home__paper-hill home__paper-hill--back" />
+        <div className="home__paper-hill home__paper-hill--middle" />
+        <div className="home__paper-hill home__paper-hill--front" />
+      </div>
+      <div className="home__scene" aria-hidden="true">
+        <img alt="" className="home__house" ref={houseRef} src="/assets/red-house-hero-v2.png" />
+      </div>
       <header className="home__header">
-        <BrandMark inverse />
+        <BrandMark iconOnly />
         <div className="home__header-actions">
           <button aria-label="打开设置" className="settings-button" onClick={onSettings}>
             <svg aria-hidden="true" viewBox="0 0 24 24">
@@ -172,37 +315,37 @@ function HomePage({
         </div>
       </header>
       <section className="home__content">
-        <p className="eyebrow eyebrow--light">TWO METRES · LOCAL FIRST</p>
-        <h1>让每一次看清，<br />都有迹可循。</h1>
-        <p className="home__lead">家庭视力筛查与趋势跟踪，分左右眼完成。<br />数据只保存在当前浏览器。</p>
-        <button className="primary-button primary-button--hero" onClick={onStart}>
-          <span>开始筛查</span><span aria-hidden="true">→</span>
+        <h1 className="home__title" ref={titleRef}>Red House</h1>
+        <p className="home__tagline" ref={taglineRef}>关注视力好帮手！</p>
+        <button className="primary-button primary-button--hero" onClick={onStart} ref={startRef}>
+          <span>开始</span><span aria-hidden="true">→</span>
         </button>
       </section>
       <footer className="home__footer">
-        <span>Windows 10/11 或 macOS · Chrome · 2 米</span>
-        <span>筛查结果不能替代专业眼科检查或医学诊断</span>
+        <span>仅作趋势参考，不能替代专业眼科检查</span>
       </footer>
     </main>
   )
 }
 
 function SettingsDialog({
+  feedbackSoundsEnabled,
   referenceWordsEnabled,
   onClose,
+  onToggleFeedbackSounds,
   onToggleReferenceWords,
 }: {
+  feedbackSoundsEnabled: boolean
   referenceWordsEnabled: boolean
   onClose: () => void
+  onToggleFeedbackSounds: () => void
   onToggleReferenceWords: () => void
 }) {
   return (
     <div className="modal-backdrop" role="presentation">
       <section aria-labelledby="settings-title" aria-modal="true" className="settings-card" role="dialog">
         <button aria-label="关闭设置" className="close-button" onClick={onClose}>×</button>
-        <p className="eyebrow">DISPLAY</p>
-        <h2 id="settings-title">测试显示设置</h2>
-        <p>选择正式测试时是否在 E 字视标下方显示英文生活单词。</p>
+        <h2 id="settings-title">显示</h2>
         <button
           aria-checked={referenceWordsEnabled}
           aria-label="显示英文参考词"
@@ -210,10 +353,19 @@ function SettingsDialog({
           onClick={onToggleReferenceWords}
           role="switch"
         >
-          <span><strong>英文参考词</strong><small>字形高度与当前视标一致</small></span>
+          <span><strong>英文参考词</strong></span>
           <i aria-hidden="true" />
         </button>
-        <small className="settings-note">此选项只影响显示，不会改变测试分数。设置仅保存在当前浏览器。</small>
+        <button
+          aria-checked={feedbackSoundsEnabled}
+          aria-label="播放答题音效"
+          className="settings-switch"
+          onClick={onToggleFeedbackSounds}
+          role="switch"
+        >
+          <span><strong>答题音效</strong></span>
+          <i aria-hidden="true" />
+        </button>
       </section>
     </div>
   )
@@ -225,12 +377,10 @@ function ConsentDialog({ onAccept, onClose }: { onAccept: () => void; onClose: (
       <section aria-labelledby="consent-title" aria-modal="true" className="consent-card" role="dialog">
         <p className="eyebrow">开始前请确认</p>
         <h2 id="consent-title">这是筛查，不是诊断</h2>
-        <p>结果会受屏幕、距离、光线、疲劳和操作影响，仅用于居家趋势参考。若出现突然视力变化、眼痛或持续模糊，请及时就医。</p>
+        <p>结果受距离、光线与疲劳影响，只用于家庭趋势参考。</p>
         <ul>
-          <li>昵称、筛查结果与历史趋势仅保存在此浏览器</li>
-          <li>经本地网址打开时默认使用设备本地 Vosk；直接双击 HTML 时使用在线语音备用，音频可能发送给浏览器识别服务</li>
-          <li>本应用不保存原始录音，键盘模式始终可用</li>
-          <li>清除浏览器数据会同时清除本地档案</li>
+          <li>记录仅保存在当前浏览器，不保存原始录音</li>
+          <li>默认 Vosk 本地识别；在线备用可能由浏览器处理音频</li>
         </ul>
         <div className="modal-actions">
           <button className="secondary-button" onClick={onClose}>暂不开始</button>
@@ -242,80 +392,35 @@ function ConsentDialog({ onAccept, onClose }: { onAccept: () => void; onClose: (
 }
 
 function SetupPage({
-  calibrationPx,
-  onCalibration,
-  onStart,
-  onVoice,
-  onOnlineVoice,
   voiceLabel,
+  voiceState,
+  voiceEngine,
 }: {
-  calibrationPx: number
-  onCalibration: (value: number) => void
-  onStart: () => void
-  onVoice: () => void
-  onOnlineVoice: () => void
   voiceLabel: string
+  voiceState: string
+  voiceEngine: string
 }) {
   return (
-    <main className="page setup-page">
-      <section className="setup-intro">
-        <p className="eyebrow">环境校准 · 约 1 分钟</p>
-        <h1>先量好两米</h1>
-        <p>用卷尺从屏幕表面量出 2 米，在地面贴一小段胶带。坐直或站直，双眼与屏幕中央大致同高。</p>
+    <main className="setup-page-minimal">
+      <div className="setup-measure-track" aria-hidden="true"><i /></div>
+      <section className="setup-distance-copy">
+        <h1>站到 2 米</h1>
       </section>
-      <section className="setup-grid">
-        <article className="instruction-card instruction-card--distance">
-          <span className="step-number">01</span>
-          <h2>卷尺定位</h2>
-          <div className="distance-visual" aria-hidden="true">
-            <span className="screen-shape" /><span className="measure-line" /><span className="person-shape" />
-          </div>
-          <strong>屏幕表面至双眼：200 cm</strong>
-          <p>本次 MVE 固定使用两米；视差定位将在后续版本加入。</p>
-        </article>
-        <article className="instruction-card">
-          <span className="step-number">02</span>
-          <h2>校准屏幕比例</h2>
-          <p>用实体尺测量下方红线，使它刚好等于 50 mm。校准后不依赖屏幕型号或分辨率。</p>
-          <div className="calibration-ruler">
-            <div className="calibration-line" style={{ width: `${calibrationPx}px` }} />
-            <span>50 mm</span>
-          </div>
-          <div className="calibration-controls" aria-label="调整校准线长度">
-            <button aria-label="缩短校准线" onClick={() => onCalibration(clampCalibrationCssPx(calibrationPx - 2))}>−</button>
-            <output>{calibrationPx.toFixed(0)} px</output>
-            <button aria-label="加长校准线" onClick={() => onCalibration(clampCalibrationCssPx(calibrationPx + 2))}>＋</button>
-          </div>
-        </article>
-        <article className="instruction-card">
-          <span className="step-number">03</span>
-          <h2>遮挡左眼</h2>
-          <div className="eye-visual" aria-hidden="true"><span /><i /></div>
-          <p>先测右眼。轻轻遮住左眼，不要按压眼球。保持环境光均匀、屏幕无反光。</p>
-          <div className="device-checks">
-            <span><i />Chrome 桌面端</span><span><i />Windows 显示缩放 100%</span><span><i />浏览器缩放 100%</span>
-          </div>
-        </article>
-        <article className="instruction-card instruction-card--reference">
-          <span className="step-number">04</span>
-          <div>
-            <h2>英文单词参考</h2>
-            <p>测试时，E 字视标正下方会出现一个每次变化的英文生活词。系统先用两米视角与实体尺校准公式算出视标物理高度，再读取当前字体的真实字形边界，反算字号，使单词字形高度与 E 字视标边长一致。</p>
-            <strong>它只用于直观参考，不会参与评分。可返回主页，通过齿轮设置随时关闭或开启。</strong>
-          </div>
-          <div className="reference-guide-demo" aria-hidden="true"><span>clear</span><i /></div>
-        </article>
-      </section>
-      <div className="setup-actions">
-        <button className="secondary-button voice-button" onClick={onVoice}>
-          <span className="mic-dot" aria-hidden="true" />{voiceLabel}
-        </button>
-        <button className="secondary-button online-voice-button" onClick={onOnlineVoice}>
-          使用在线语音备用
-        </button>
-        <button className="primary-button" onClick={onStart}>我已站好，开始右眼测试</button>
-      </div>
-      <p className="setup-note">在线备用需联网，语音可能由浏览器服务处理；本应用不保存录音。也可使用键盘方向键。</p>
+      <div
+        aria-hidden="true"
+        className="setup-voice-orb"
+        data-engine={voiceEngine}
+        data-state={voiceState}
+      ><i aria-hidden="true" /></div>
+      <p
+        className="voice-status-copy"
+        data-feedback={voiceLabel.startsWith('已听到') ? 'heard' : voiceState === 'fallback' ? 'missed' : 'listening'}
+        data-state={voiceState}
+        role="status"
+      >
+        <i aria-hidden="true" />
+        <span>{voiceLabel}</span>
+      </p>
     </main>
   )
 }
@@ -340,6 +445,7 @@ function TestPage({
   onReady,
   showDirectionPad,
   voiceState,
+  voiceStatus,
   referenceWord,
   showReferenceWord,
 }: {
@@ -352,16 +458,29 @@ function TestPage({
   onReady: () => void
   showDirectionPad: boolean
   voiceState: string
-  referenceWord: string
+  voiceStatus: VoiceState
+  referenceWord: ReferenceWord
   showReferenceWord: boolean
 }) {
   const displaySize = getCalibratedOptotypeCssPx(state.level, calibrationPx)
-  const referenceWordFontSize = getReferenceWordFontCssPx(referenceWord, displaySize)
+  const referenceWordFontSize = getReferenceWordFontCssPx(referenceWord.en, displaySize)
+  const referenceWordStyle: CSSProperties = {
+    color: '#1c211d',
+    fontFamily: REFERENCE_WORD_FONT_FAMILY,
+    fontSize: `${referenceWordFontSize}px`,
+    fontWeight: REFERENCE_WORD_FONT_WEIGHT,
+    letterSpacing: '.04em',
+  }
   return (
     <main className="test-page">
       <div className="test-meta">
         <span>{eye === 'right' ? '右眼' : '左眼'}</span>
-        <span>{state.level.toFixed(1)}</span>
+        <span
+          aria-label={`当前视力级别 ${state.level.toFixed(1)}`}
+          className="optotype-level"
+        >
+          {state.level.toFixed(1)}
+        </span>
       </div>
       <div
         className="symbol-stage"
@@ -372,22 +491,30 @@ function TestPage({
       >
         <Optotype calibrationPx={calibrationPx} className="optotype--animated" direction={direction} level={state.level} />
         {showReferenceWord && (
-          <span
-            aria-label={`英文参考词：${referenceWord}`}
-            className="reference-word"
-            data-size={displaySize.toFixed(2)}
-            data-target-height={displaySize.toFixed(4)}
-            style={{
-              fontFamily: REFERENCE_WORD_FONT_FAMILY,
-              fontSize: `${referenceWordFontSize}px`,
-              fontWeight: REFERENCE_WORD_FONT_WEIGHT,
-            }}
-          >
-            {referenceWord}
-          </span>
+          <div className="reference-word-group">
+            <span
+              aria-label={`英文参考词：${referenceWord.en}`}
+              className="reference-word"
+              data-size={displaySize.toFixed(2)}
+              data-target-height={displaySize.toFixed(4)}
+              style={referenceWordStyle}
+            >
+              {referenceWord.en}
+            </span>
+            <span className="reference-word-meaning" style={referenceWordStyle}>{referenceWord.zh}</span>
+          </div>
         )}
       </div>
-      <p aria-live="polite" className="voice-state">{voiceState}</p>
+      <p
+        aria-live="polite"
+        className="voice-state"
+        data-feedback={voiceState.startsWith('已听到') ? 'heard' : voiceStatus === 'fallback' ? 'missed' : 'listening'}
+        data-state={voiceStatus}
+        role="status"
+      >
+        <i aria-hidden="true" />
+        <span>{voiceState}</span>
+      </p>
       {showDirectionPad && (
         <div className="direction-pad" aria-label="方向回答">
           {(['up', 'left', 'down', 'right'] as const).map((answer) => (
@@ -409,27 +536,74 @@ function TestPage({
   )
 }
 
-function EyeSwitchPage({ onContinue }: { onContinue: () => void }) {
+function EyeGuidePage({
+  eye,
+  voiceLabel,
+  voiceState,
+  voiceEngine,
+}: {
+  eye: Eye
+  voiceLabel: string
+  voiceState: string
+  voiceEngine: string
+}) {
+  const isRight = eye === 'right'
   return (
-    <main className="eye-switch-page">
-      <div className="switch-icon" aria-hidden="true"><span>R</span><i /><span>L</span></div>
-      <p className="eyebrow">右眼已完成</p>
-      <h1>现在交换遮挡</h1>
-      <p>轻轻遮住右眼，保持身体位置不变。准备好后继续测试左眼。</p>
-      <button className="primary-button" onClick={onContinue}>开始左眼测试</button>
+    <main className="eye-guide-page">
+      <div className="eye-guide-visual" aria-hidden="true">
+        <div className={`eye-guide-arrow eye-guide-arrow--${eye}`}><i /></div>
+        {(['left', 'right'] as const).map((side) => {
+          const covered = isRight ? side === 'left' : side === 'right'
+          return (
+            <span
+              className={`eye-guide-eye eye-guide-eye--${side}${covered ? ' eye-guide-eye--covered' : ''}`}
+              key={side}
+            >
+              👁️
+            </span>
+          )
+        })}
+      </div>
+      <section className="eye-guide-copy">
+        <p>{isRight ? '遮住左眼' : '遮住右眼'}</p>
+        <h1>{isRight ? '测试右眼' : '测试左眼'}</h1>
+      </section>
+      <div
+        aria-hidden="true"
+        className="setup-voice-orb"
+        data-engine={voiceEngine}
+        data-state={voiceState}
+      ><i aria-hidden="true" /></div>
+      <p
+        className="voice-status-copy"
+        data-feedback={voiceLabel.startsWith('已听到') ? 'heard' : voiceState === 'fallback' ? 'missed' : 'listening'}
+        data-state={voiceState}
+        role="status"
+      >
+        <i aria-hidden="true" />
+        <span>{voiceLabel}</span>
+      </p>
     </main>
   )
 }
 
-function AnalysisPage() {
+export function AnalysisPage() {
   return (
     <main className="analysis-page">
-      <div className="analysis-photo" aria-hidden="true" />
+      <div aria-label="分析进度" className="analysis-progress" role="progressbar">
+        <svg aria-hidden="true" viewBox="0 0 240 240">
+          <circle className="analysis-progress__track" cx="120" cy="120" r="92" />
+          <circle className="analysis-progress__ring" cx="120" cy="120" r="92" />
+        </svg>
+        <img
+          alt="红房子"
+          className="analysis-progress__house"
+          src="/assets/red-house-cutout-v3.png"
+        />
+      </div>
       <div className="analysis-copy">
-        <div className="analysis-loader" aria-hidden="true"><i /><i /><i /></div>
-        <p className="eyebrow eyebrow--light">双眼测试完成</p>
-        <h1>正在分析本次数据</h1>
-        <p>对比近期中位水平 · 检查左右眼差异 · 生成趋势建议</p>
+        <h1>正在分析</h1>
+        <p>双眼数据</p>
       </div>
     </main>
   )
@@ -452,39 +626,25 @@ function ReportPage({ data, onHistory, onRestart }: { data: AppData; onHistory: 
 
   return (
     <main className="page report-page">
-      <section className="report-hero">
-        <div>
-          <p className="eyebrow">本次筛查 · {new Date(current.completedAt).toLocaleString('zh-CN', { month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
-          <h1>看见变化，<br />也看见安心。</h1>
-          <p>{guidance.copy}</p>
+      <section className="report-summary">
+        <div className="report-summary__heading">
+          <p>{new Date(current.completedAt).toLocaleString('zh-CN', { month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
+          <h1>本次结果</h1>
+          <span>{guidance.title}</span>
         </div>
         <div className="score-pair">
-          <article><span>右眼</span><strong>{current.rightEye.toFixed(1)}</strong><small>五分记录法</small></article>
-          <article><span>左眼</span><strong>{current.leftEye.toFixed(1)}</strong><small>五分记录法</small></article>
+          <article><span>右眼</span><strong>{current.rightEye.toFixed(1)}</strong></article>
+          <article><span>左眼</span><strong>{current.leftEye.toFixed(1)}</strong></article>
         </div>
       </section>
-      <section className={`guidance-card guidance-card--${overallStatus}`}>
-        <div className="status-mark" aria-hidden="true" />
-        <div><p>趋势提示</p><h2>{guidance.title}</h2></div>
-        <p>{overallStatus === 'retest' ? '建议 24 小时内在相同条件复测' : '保持两米距离与相同设备，数据才更可比较'}</p>
+      <section className="chart-card report-trend">
+        <div className="section-heading"><div><p className="eyebrow">7 DAYS</p><h2>近期趋势</h2></div><button className="text-link" onClick={onHistory}>详情 →</button></div>
+        <TrendChart compact sessions={data.sessions} />
       </section>
-      <section className="report-grid">
-        <article className="chart-card">
-          <div className="section-heading"><div><p className="eyebrow">最近 7 次</p><h2>双眼变化趋势</h2></div><button className="text-link" onClick={onHistory}>查看详情 →</button></div>
-          <TrendChart compact sessions={data.sessions} />
-        </article>
-        <article className="facts-card">
-          <p className="eyebrow">本次条件</p>
-          <dl>
-            <div><dt>观察距离</dt><dd>2.00 m</dd></div>
-            <div><dt>输入方式</dt><dd>{current.mode === 'voice' ? '离线语音' : '键盘'}</dd></div>
-            <div><dt>有效上限</dt><dd>5.2</dd></div>
-            <div><dt>数据位置</dt><dd>仅此浏览器</dd></div>
-          </dl>
-          <button className="secondary-button" onClick={onRestart}>重新筛查</button>
-        </article>
-      </section>
-      <aside className="medical-note"><strong>重要说明</strong><p>本报告用于家庭筛查与趋势记录，不能用于验光配镜、疾病诊断或替代专业眼科检查。结果异常或伴随不适时，请咨询医生。</p></aside>
+      <footer className="report-footer">
+        <p>仅作趋势参考，不替代专业检查。</p>
+        <button className="text-link" onClick={onRestart}>重新测试</button>
+      </footer>
     </main>
   )
 }
@@ -519,13 +679,11 @@ function ProfileDrawer({ data, onSave, onClose }: { data: AppData; onSave: (nick
     <div className="drawer-backdrop" onMouseDown={(event) => event.target === event.currentTarget && onClose()} role="presentation">
       <aside aria-labelledby="profile-title" aria-modal="true" className="profile-drawer" role="dialog">
         <button aria-label="关闭档案" className="close-button" onClick={onClose}>×</button>
-        <p className="eyebrow">LOCAL PROFILE</p><h2 id="profile-title">本地档案</h2>
-        <p>本次 MVE 不创建云端账号。“登录”仅打开保存在此浏览器中的演示档案。</p>
+        <h2 id="profile-title">档案</h2>
         <label htmlFor="nickname">昵称</label>
-        <input id="nickname" maxLength={24} onChange={(event) => setNickname(event.target.value)} value={nickname} />
-        <div className="profile-stat"><span>历史记录</span><strong>{data.sessions.length} 次</strong></div>
-        <button className="primary-button" onClick={() => onSave(nickname)}>保存昵称</button>
-        <small>为保护隐私，请不要填写真实姓名、学校或联系方式。</small>
+        <input id="nickname" maxLength={24} onChange={(event) => setNickname(event.target.value)} placeholder="昵称" value={nickname} />
+        <div className="profile-stat"><span>记录</span><strong>{data.sessions.length}</strong></div>
+        <button className="primary-button" onClick={() => onSave(nickname)}>保存</button>
       </aside>
     </div>
   )
@@ -540,7 +698,10 @@ export default function App() {
   const [referenceWordsEnabled, setReferenceWordsEnabled] = useState(
     () => loadPreferences().referenceWordsEnabled,
   )
-  const [calibrationPx, setCalibrationPx] = useState(DEFAULT_CALIBRATION_CSS_PX)
+  const [feedbackSoundsEnabled, setFeedbackSoundsEnabled] = useState(
+    () => loadPreferences().feedbackSoundsEnabled,
+  )
+  const calibrationPx = DEFAULT_CALIBRATION_CSS_PX
   const [count, setCount] = useState(3)
   const [eye, setEye] = useState<Eye>('right')
   const [eyeState, setEyeState] = useState<EyeTestState>(() => createEyeTestState())
@@ -551,7 +712,11 @@ export default function App() {
   const [answers, setAnswers] = useState<AnswerRecord[]>([])
   const [results, setResults] = useState<Partial<Record<Eye, number>>>({})
   const [symbolReady, setSymbolReady] = useState(false)
+  const [promptPlaying, setPromptPlaying] = useState(false)
   const inputModeRef = useRef<'voice' | 'keyboard'>('keyboard')
+  const promptedViewRef = useRef<string | null>(null)
+  const promptRunRef = useRef(0)
+  const confirmationReadyRef = useRef(false)
   const pageRef = usePageMotion(view)
 
   const startCountdown = useCallback(() => {
@@ -561,7 +726,7 @@ export default function App() {
 
   const advanceReferenceWord = useCallback(() => {
     const nextWord = selectNextReferenceWord(referenceWordHistoryRef.current)
-    referenceWordHistoryRef.current = [...referenceWordHistoryRef.current, nextWord]
+    referenceWordHistoryRef.current = [...referenceWordHistoryRef.current, nextWord.en]
     setReferenceWord(nextWord)
   }, [])
 
@@ -572,17 +737,33 @@ export default function App() {
     setDirectionHistory([])
     const firstWord = selectNextReferenceWord([])
     setReferenceWord(firstWord)
-    referenceWordHistoryRef.current = [firstWord]
+    referenceWordHistoryRef.current = [firstWord.en]
     setAnswers([])
     setResults({})
     setSymbolReady(false)
+    promptedViewRef.current = null
+    confirmationReadyRef.current = false
+    stopInstruction()
   }, [])
+
+  const confirmCurrentStep = useCallback(() => {
+    if (view === 'setup') {
+      setView('eyeGuide')
+      return
+    }
+    if (view === 'eyeGuide') {
+      stopInstruction()
+      startCountdown()
+    }
+  }, [startCountdown, view])
 
   const handleAnswer = useCallback(
     (answer: Direction) => {
       if (view !== 'test' || eyeState.status !== 'active' || !symbolReady) return
       setSymbolReady(false)
-      const correct = answer === direction
+      const feedbackKind = feedbackKindForAnswer(direction, answer)
+      const correct = feedbackKind === 'pass'
+      void playFeedbackSound(feedbackKind, feedbackSoundsEnabled)
       const nextState = applyEyeAnswer(eyeState, correct)
       setAnswers((current) => [...current, { eye, level: eyeState.level, shown: direction, answered: answer, correct }])
       setEyeState(nextState)
@@ -597,7 +778,7 @@ export default function App() {
           setDirectionHistory([])
           advanceReferenceWord()
           setSymbolReady(false)
-          setView('eyeSwitch')
+          setView('eyeGuide')
         } else {
           const session: ScreeningSession = {
             id: createSessionId(),
@@ -619,20 +800,66 @@ export default function App() {
       setDirection(selectNextDirection(nextHistory))
       advanceReferenceWord()
     },
-    [advanceReferenceWord, direction, directionHistory, eye, eyeState, results.right, symbolReady, view],
+    [advanceReferenceWord, direction, directionHistory, eye, eyeState, feedbackSoundsEnabled, results.right, symbolReady, view],
   )
 
   const onVoiceCommand = useCallback(
     (command: VoiceCommand) => {
+      if (promptPlaying) return
       inputModeRef.current = 'voice'
-      if (command === 'confirm' && (view === 'setup' || view === 'eyeSwitch')) startCountdown()
+      if (command === 'confirm' && (view === 'setup' || view === 'eyeGuide')) {
+        if (!confirmationReadyRef.current) return
+        confirmationReadyRef.current = false
+        confirmCurrentStep()
+      }
       if (command !== 'confirm' && view === 'test') handleAnswer(command)
     },
-    [handleAnswer, startCountdown, view],
+    [confirmCurrentStep, handleAnswer, promptPlaying, view],
   )
   const voiceScope: VoiceScope = view === 'test' ? 'direction-test' : 'distance-confirmation'
   const voice = useVoiceInput(onVoiceCommand, voiceScope)
   const stopVoice = voice.stop
+  const pauseVoice = voice.pause
+  const resumeVoice = voice.resume
+  const clearVoiceFeedback = voice.clearTransientFeedback
+
+  const playPrompt = useCallback(async (text: string) => {
+    const promptRun = promptRunRef.current + 1
+    promptRunRef.current = promptRun
+    confirmationReadyRef.current = false
+    setPromptPlaying(true)
+    await pauseVoice()
+    await speakInstruction(text)
+    await new Promise<void>((resolve) => window.setTimeout(resolve, 400))
+    if (promptRun !== promptRunRef.current) return
+    await resumeVoice()
+    if (promptRun === promptRunRef.current) {
+      confirmationReadyRef.current = true
+      setPromptPlaying(false)
+    }
+  }, [pauseVoice, resumeVoice])
+
+  useEffect(() => {
+    if (
+      voice.state !== 'listening' ||
+      (view !== 'setup' && view !== 'eyeGuide')
+    ) {
+      return
+    }
+    const promptKey = view === 'eyeGuide' ? `${view}:${eye}` : view
+    if (promptedViewRef.current === promptKey) return
+    promptedViewRef.current = promptKey
+    const prompt = view === 'setup'
+      ? DISTANCE_PROMPT
+      : eye === 'right'
+        ? RIGHT_EYE_PROMPT
+        : LEFT_EYE_PROMPT
+    void playPrompt(prompt)
+  }, [eye, playPrompt, view, voice.state])
+
+  useEffect(() => {
+    clearVoiceFeedback()
+  }, [answers.length, clearVoiceFeedback, eye, view])
 
   useEffect(() => {
     if (view === 'home' || view === 'analysis' || view === 'report' || view === 'history') {
@@ -652,7 +879,7 @@ export default function App() {
 
   useEffect(() => {
     if (view !== 'analysis') return
-    const timer = window.setTimeout(() => setView('report'), isTestMode() ? 120 : 2600)
+    const timer = window.setTimeout(() => setView('report'), isTestMode() ? 1_500 : 2600)
     return () => window.clearTimeout(timer)
   }, [view])
 
@@ -669,24 +896,56 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [handleAnswer, view])
 
-  const voiceLabel = useMemo(() => {
-    if (voice.state === 'listening') {
-      if (voice.engine === 'vosk') return 'Vosk 本地语音已开启'
-      if (voice.engine === 'web-speech') return '在线语音备用已开启'
-      return 'Rhino 本地语音已开启'
+  useEffect(() => {
+    if (view !== 'setup' && view !== 'eyeGuide') return
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Enter' || event.repeat) return
+      if (promptPlaying || (view === 'setup' && voice.state === 'loading')) return
+      event.preventDefault()
+      inputModeRef.current = 'keyboard'
+      confirmCurrentStep()
     }
-    if (voice.state === 'loading') return voice.detail || '正在加载离线模型'
-    if (!voice.configured) return '语音未配置 · 使用键盘'
-    if (voice.state === 'error') return voice.detail || '语音暂不可用'
-    if (voice.engine === 'web-speech') return '启用在线语音备用'
-    return '打开离线麦克风'
-  }, [voice.configured, voice.detail, voice.engine, voice.state])
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [confirmCurrentStep, promptPlaying, view, voice.state])
+
+  const voiceLabel = useMemo(() => {
+    if (promptPlaying) return '正在播报提示…'
+    if (voice.state === 'listening') {
+      if (voice.detail.startsWith('已听到')) return voice.detail
+      const instruction = view === 'test'
+        ? '请说“上、下、左、右”'
+        : '说“准备好了”'
+      if (voice.engine === 'vosk') return `离线语音已就绪 · ${instruction}`
+      if (voice.engine === 'web-speech') return `在线语音已就绪 · ${instruction}`
+      return `本地语音已就绪 · ${instruction}`
+    }
+    if (voice.state === 'loading') {
+      return voice.detail || '正在加载离线语音模型 · 首次约需 30–60 秒'
+    }
+    if (voice.state === 'fallback' && voice.detail.startsWith('没听清')) {
+      return view === 'test'
+        ? '没听清 · 请重新说当前方向'
+        : '没听清 · 请再说“准备好了”'
+    }
+    if (
+      !voice.configured ||
+      voice.state === 'error' ||
+      voice.state === 'fallback' ||
+      voice.state === 'unavailable'
+    ) {
+      return voice.detail || '离线语音不可用 · 已切换键盘方向键'
+    }
+    return '离线语音待启动'
+  }, [promptPlaying, view, voice.configured, voice.detail, voice.engine, voice.state])
 
   const beginFromHome = () => {
+    primeFeedbackAudio(feedbackSoundsEnabled)
     if (!data.profile.consentAcceptedAt) setShowConsent(true)
     else {
       resetTest()
       setView('setup')
+      void voice.activate(voicePreferenceFromUrl())
     }
   }
 
@@ -695,39 +954,41 @@ export default function App() {
       case 'home':
         return <HomePage onProfile={() => setShowProfile(true)} onSettings={() => setShowSettings(true)} onStart={beginFromHome} />
       case 'setup':
-        return <SetupPage calibrationPx={calibrationPx} onCalibration={setCalibrationPx} onOnlineVoice={() => void voice.activate('web-speech')} onStart={startCountdown} onVoice={() => void voice.activate()} voiceLabel={voiceLabel} />
+        return <SetupPage voiceEngine={voice.engine} voiceLabel={voiceLabel} voiceState={voice.state} />
       case 'countdown':
         return <CountdownPage count={count} eye={eye} />
       case 'test':
-        return <TestPage answerIndex={answers.length} calibrationPx={calibrationPx} direction={direction} eye={eye} onAnswer={handleAnswer} onReady={() => setSymbolReady(true)} referenceWord={referenceWord} showDirectionPad={voice.state !== 'listening'} showReferenceWord={referenceWordsEnabled} state={eyeState} voiceState={symbolReady ? (voice.detail || (voice.state === 'listening' ? '离线语音已开启' : '键盘方向键已就绪')) : '视标准备中'} />
-      case 'eyeSwitch':
-        return <EyeSwitchPage onContinue={startCountdown} />
+        return <TestPage answerIndex={answers.length} calibrationPx={calibrationPx} direction={direction} eye={eye} onAnswer={handleAnswer} onReady={() => setSymbolReady(true)} referenceWord={referenceWord} showDirectionPad={voice.engine === 'keyboard' || voice.state === 'error' || voice.state === 'unavailable'} showReferenceWord={referenceWordsEnabled} state={eyeState} voiceState={voice.detail || (symbolReady ? (voice.state === 'listening' ? '正在听 · 请说当前方向' : '键盘方向键已就绪') : '视标准备中')} voiceStatus={voice.state} />
+      case 'eyeGuide':
+        return <EyeGuidePage eye={eye} voiceEngine={voice.engine} voiceLabel={voiceLabel} voiceState={voice.state} />
       case 'analysis':
         return <AnalysisPage />
       case 'report':
-        return <ReportPage data={data} onHistory={() => setView('history')} onRestart={() => { resetTest(); setView('setup') }} />
+        return <ReportPage data={data} onHistory={() => setView('history')} onRestart={() => { primeFeedbackAudio(feedbackSoundsEnabled); resetTest(); setView('setup'); void voice.activate(voicePreferenceFromUrl()) }} />
       case 'history':
         return <HistoryPage onBack={() => setView('report')} sessions={data.sessions} />
     }
   })()
 
-  const showHeader = !['home', 'countdown', 'test', 'analysis'].includes(view)
+  const showHeader = !['home', 'setup', 'eyeGuide', 'countdown', 'test', 'analysis'].includes(view)
 
   return (
     <div className={`app app--${view}`}>
       <a className="skip-link" href="#main-content">跳到主要内容</a>
-      {showHeader && <AppHeader onHome={() => setView('home')} onProfile={() => setShowProfile(true)} />}
+      {showHeader && <AppHeader onHome={() => setView('home')} />}
       <section id="main-content" key={view} ref={pageRef as React.RefObject<HTMLElement>} style={{ minHeight: '100%' } as CSSProperties}>
         {content}
       </section>
       {showConsent && (
         <ConsentDialog
           onAccept={() => {
+            primeFeedbackAudio(feedbackSoundsEnabled)
             const accepted = updateProfile({ consentAcceptedAt: new Date().toISOString() })
             setData(accepted)
             setShowConsent(false)
             resetTest()
             setView('setup')
+            void voice.activate(voicePreferenceFromUrl())
           }}
           onClose={() => setShowConsent(false)}
         />
@@ -744,7 +1005,13 @@ export default function App() {
       )}
       {showSettings && (
         <SettingsDialog
+          feedbackSoundsEnabled={feedbackSoundsEnabled}
           onClose={() => setShowSettings(false)}
+          onToggleFeedbackSounds={() => {
+            const next = !feedbackSoundsEnabled
+            setFeedbackSoundsEnabled(next)
+            saveFeedbackSoundsEnabled(next)
+          }}
           onToggleReferenceWords={() => {
             const next = !referenceWordsEnabled
             setReferenceWordsEnabled(next)

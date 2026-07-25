@@ -7,7 +7,36 @@ import {
 
 const SAMPLE_RATE = 16_000
 const MODEL_LOAD_TIMEOUT_MS = 60_000
-const COMMAND_GRAMMAR = JSON.stringify(['上', '下', '左', '右', '确认', '[unk]'])
+const FEEDBACK_DURATION_MS = 1_500
+const COMMAND_GRAMMAR = JSON.stringify([
+  '上',
+  '下',
+  '左',
+  '右',
+  '确认',
+  '好的',
+  '欧克',
+  '哦可',
+  '欧凯',
+  '奥凯',
+  '欧',
+  '哦',
+  '喔',
+  '噢',
+  '欧了',
+  '哦了',
+  'ok',
+  'okay',
+  '好',
+  '可以',
+  '好了',
+  '我好了',
+  '可以了',
+  '准备好',
+  '准备好了',
+  '我准备好了',
+  '[unk]',
+])
 
 interface StoppableTrack {
   stop(): void
@@ -39,8 +68,15 @@ interface VoskAudioGraph {
   gain: Disconnectable
 }
 
+interface VoskRecognitionMessage {
+  result: {
+    text?: string
+    partial?: string
+  }
+}
+
 interface VoskRecognizer {
-  on(event: string, listener: (message: { result: { text: string } }) => void): void
+  on(event: string, listener: (message: VoskRecognitionMessage) => void): void
   setWords(words: boolean): void
   acceptWaveform(buffer: AudioBuffer): void
   remove(): void
@@ -141,11 +177,39 @@ export async function createVoskController(
   let stream: MediaStreamLike | null = null
   let graph: VoskAudioGraph | null = null
   let stopped = false
-  let consecutiveRejected = 0
+  let paused = false
+  let recognizerRun = 0
+  let lastPartialCommand: VoiceCommand | null = null
+  let lastPartialAt = Number.NEGATIVE_INFINITY
+  let feedbackTimer: ReturnType<typeof globalThis.setTimeout> | undefined
+  const partialDuplicateWindowMs = 900
+
+  const commandLabel: Record<VoiceCommand, string> = {
+    up: '上',
+    down: '下',
+    left: '左',
+    right: '右',
+    confirm: '准备好了',
+  }
+
+  const clearFeedbackTimer = () => {
+    if (feedbackTimer === undefined) return
+    globalThis.clearTimeout(feedbackTimer)
+    feedbackTimer = undefined
+  }
+
+  const resumeListeningSoon = () => {
+    clearFeedbackTimer()
+    feedbackTimer = globalThis.setTimeout(() => {
+      feedbackTimer = undefined
+      if (!stopped && !paused) onState('listening', '正在听 · 请说“上、下、左、右”')
+    }, FEEDBACK_DURATION_MS)
+  }
 
   const release = async (reportIdle: boolean) => {
     if (stopped) return
     stopped = true
+    clearFeedbackTimer()
     if (graph?.processor) graph.processor.onaudioprocess = null
     stream?.getTracks().forEach((track) => track.stop())
     graph?.source.disconnect()
@@ -164,37 +228,92 @@ export async function createVoskController(
     if (graph.audioContext.state === 'suspended') await graph.audioContext.resume?.()
     onState('loading', '麦克风已打开 · 正在加载离线模型')
     model = await loadModelWithTimeout(modelPath, runtime)
-    recognizer = new model.KaldiRecognizer(
-      graph.audioContext.sampleRate ?? SAMPLE_RATE,
-      COMMAND_GRAMMAR,
-    )
-    recognizer.setWords(true)
-    recognizer.on('result', (message) => {
-      const command = normalizeVoiceCommand(message.result.text)
-      if (command) {
-        consecutiveRejected = 0
-        onState('listening')
-        onCommand(command)
-        return
-      }
-      consecutiveRejected += 1
-      if (consecutiveRejected >= 2) {
-        onState('fallback', '连续两次未听清，已显示方向按钮')
-      } else {
-        onState('listening', '未听清，请再说一次')
-      }
-    })
+    const activeModel = model
+    const activeGraph = graph
+    const emitCommand = (command: VoiceCommand) => {
+      clearFeedbackTimer()
+      onState('listening', `已听到：${commandLabel[command]}`)
+      onCommand(command)
+      resumeListeningSoon()
+    }
+    const installRecognizer = () => {
+      const run = recognizerRun + 1
+      recognizerRun = run
+      lastPartialCommand = null
+      lastPartialAt = Number.NEGATIVE_INFINITY
+      const nextRecognizer = new activeModel.KaldiRecognizer(
+        activeGraph.audioContext.sampleRate ?? SAMPLE_RATE,
+        COMMAND_GRAMMAR,
+      )
+      nextRecognizer.setWords(true)
+      const isCurrentRun = () => (
+        !stopped &&
+        !paused &&
+        recognizerRun === run &&
+        recognizer === nextRecognizer
+      )
+      nextRecognizer.on('partialresult', (message) => {
+        if (!isCurrentRun()) return
+        const command = normalizeVoiceCommand(message.result.partial ?? '')
+        if (!command) return
+        const now = Date.now()
+        if (
+          command === lastPartialCommand &&
+          now - lastPartialAt < partialDuplicateWindowMs
+        ) return
+        lastPartialCommand = command
+        lastPartialAt = now
+        emitCommand(command)
+      })
+      nextRecognizer.on('result', (message) => {
+        if (!isCurrentRun()) return
+        const command = normalizeVoiceCommand(message.result.text ?? '')
+        const duplicatesRecentPartial = Boolean(
+          command &&
+          command === lastPartialCommand &&
+          Date.now() - lastPartialAt < partialDuplicateWindowMs * 2,
+        )
+        lastPartialCommand = null
+        lastPartialAt = Number.NEGATIVE_INFINITY
+        if (duplicatesRecentPartial) return
+        if (command) {
+          emitCommand(command)
+          return
+        }
+        onState('fallback', '没听清 · 请重新说当前方向')
+        resumeListeningSoon()
+      })
+      return nextRecognizer
+    }
+    recognizer = installRecognizer()
     graph.processor.onaudioprocess = (event) => {
+      if (paused) return
       try {
         recognizer?.acceptWaveform(event.inputBuffer)
       } catch {
         onState('error', '语音处理暂时中断，方向键仍可使用')
       }
     }
-    onState('listening')
+    onState('listening', '正在听 · 请说“上、下、左、右”')
 
     return {
       engine: 'vosk',
+      pause: async () => {
+        if (stopped || paused) return
+        paused = true
+        recognizerRun += 1
+        const previousRecognizer = recognizer
+        recognizer = null
+        previousRecognizer?.remove()
+        clearFeedbackTimer()
+        onState('loading', '正在播报提示…')
+      },
+      resume: async () => {
+        if (stopped || !paused) return
+        paused = false
+        recognizer = installRecognizer()
+        onState('listening', '正在听 · 请说“上、下、左、右”')
+      },
       stop: () => release(true),
     }
   } catch (error) {

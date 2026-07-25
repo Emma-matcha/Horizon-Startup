@@ -89,12 +89,29 @@ export async function createRhinoController(
       outputSampleRate: rhino.sampleRate,
     })
     await WebVoiceProcessor.subscribe(rhino)
+    let subscribed = true
+    let paused = false
     onState('listening')
 
     return {
       engine: 'rhino',
-      stop: async () => {
+      pause: async () => {
+        if (paused || !subscribed) return
+        paused = true
         await WebVoiceProcessor.unsubscribe(rhino)
+        subscribed = false
+        onState('loading', '正在播报提示…')
+      },
+      resume: async () => {
+        if (!paused || subscribed) return
+        await WebVoiceProcessor.subscribe(rhino)
+        subscribed = true
+        paused = false
+        onState('listening')
+      },
+      stop: async () => {
+        if (subscribed) await WebVoiceProcessor.unsubscribe(rhino)
+        subscribed = false
         await rhino.release()
         rhino.terminate()
         onState('idle')
