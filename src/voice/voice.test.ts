@@ -6,7 +6,7 @@ import {
   resolveVoiceEngine,
 } from './contracts'
 import { createVoskController, type VoskRuntime } from './vosk'
-import { readVoiceConfiguration } from './voice'
+import { canUseBundledVosk, readVoiceConfiguration } from './voice'
 
 describe('voice command contract', () => {
   it.each([
@@ -35,6 +35,12 @@ describe('voice command contract', () => {
 })
 
 describe('voice engine selection', () => {
+  it('uses bundled Vosk over HTTP but not from an opaque file origin', () => {
+    expect(canUseBundledVosk('http:')).toBe(true)
+    expect(canUseBundledVosk('https:')).toBe(true)
+    expect(canUseBundledVosk('file:')).toBe(false)
+  })
+
   it('ships with the bundled Vosk model as the no-key default', () => {
     const configuration = readVoiceConfiguration()
 
@@ -86,6 +92,32 @@ describe('voice engine selection', () => {
 })
 
 describe('Vosk controller lifecycle', () => {
+  it('stops waiting for a model that never finishes loading', async () => {
+    vi.useFakeTimers()
+    try {
+      const onState = vi.fn()
+      const runtime: VoskRuntime = {
+        createModel: vi.fn().mockReturnValue(new Promise(() => undefined)),
+        getUserMedia: vi.fn(),
+        createAudioGraph: vi.fn(),
+      }
+      let settled = false
+
+      void createVoskController('/models/cn.tar.gz', vi.fn(), onState, runtime).then(() => {
+        settled = true
+      })
+      await vi.advanceTimersByTimeAsync(20_000)
+
+      expect(settled).toBe(true)
+      expect(onState).toHaveBeenLastCalledWith(
+        'error',
+        '离线模型加载超时，已切换备用输入',
+      )
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('emits only strict commands and releases every microphone resource', async () => {
     let resultListener: ((message: { result: { text: string } }) => void) | undefined
     const remove = vi.fn()

@@ -45,6 +45,7 @@ export default defineConfig({
         'src/domain/**/*.ts',
         'src/data/**/*.ts',
         'src/voice/contracts.ts',
+        'src/voice/embeddedModel.ts',
         'src/voice/vosk.ts',
         'src/voice/webSpeech.ts'
       ],

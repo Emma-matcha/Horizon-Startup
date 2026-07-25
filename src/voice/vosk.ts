@@ -6,6 +6,7 @@ import {
 } from './contracts'
 
 const SAMPLE_RATE = 16_000
+const MODEL_LOAD_TIMEOUT_MS = 20_000
 const COMMAND_GRAMMAR = JSON.stringify(['上', '下', '左', '右', '确认', '[unk]'])
 
 interface StoppableTrack {
@@ -91,6 +92,9 @@ const browserRuntime: VoskRuntime = {
 }
 
 function permissionErrorDetail(error: unknown): string {
+  if (error instanceof DOMException && error.name === 'TimeoutError') {
+    return '离线模型加载超时，已切换备用输入'
+  }
   if (error instanceof DOMException && error.name === 'NotAllowedError') {
     return '麦克风权限被拒绝，已切换键盘模式'
   }
@@ -98,6 +102,30 @@ function permissionErrorDetail(error: unknown): string {
     return '没有检测到麦克风，已切换键盘模式'
   }
   return '离线语音模型启动失败，已切换键盘模式'
+}
+
+async function loadModelWithTimeout(
+  path: string,
+  runtime: VoskRuntime,
+): Promise<VoskModel> {
+  const modelPromise = runtime.createModel(path)
+  let timeoutId: ReturnType<typeof globalThis.setTimeout> | undefined
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutId = globalThis.setTimeout(() => {
+      reject(new DOMException('Vosk model load timed out', 'TimeoutError'))
+    }, MODEL_LOAD_TIMEOUT_MS)
+  })
+
+  try {
+    return await Promise.race([modelPromise, timeoutPromise])
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'TimeoutError') {
+      void modelPromise.then((lateModel) => lateModel.terminate()).catch(() => undefined)
+    }
+    throw error
+  } finally {
+    if (timeoutId !== undefined) globalThis.clearTimeout(timeoutId)
+  }
 }
 
 export async function createVoskController(
@@ -129,7 +157,7 @@ export async function createVoskController(
 
   onState('loading', '正在本地加载 Vosk 中文模型')
   try {
-    model = await runtime.createModel(modelPath)
+    model = await loadModelWithTimeout(modelPath, runtime)
     stream = await runtime.getUserMedia()
     graph = runtime.createAudioGraph(stream)
     recognizer = new model.KaldiRecognizer(

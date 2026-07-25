@@ -10,8 +10,8 @@ const keyForDirection: Record<string, string> = {
 export class VisionPage {
   constructor(readonly page: Page) {}
 
-  async goto() {
-    await this.page.goto('/?test=1')
+  async goto(url = '/?test=1') {
+    await this.page.goto(url)
     await this.page.evaluate(() => localStorage.clear())
     await this.page.reload()
     await expect(this.page.getByRole('heading', { name: /让每一次看清/ })).toBeVisible()

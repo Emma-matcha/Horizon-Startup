@@ -175,7 +175,7 @@ function ConsentDialog({ onAccept, onClose }: { onAccept: () => void; onClose: (
         <p>结果会受屏幕、距离、光线、疲劳和操作影响，仅用于居家趋势参考。若出现突然视力变化、眼痛或持续模糊，请及时就医。</p>
         <ul>
           <li>昵称、筛查结果与历史趋势仅保存在此浏览器</li>
-          <li>默认使用设备本地 Vosk；在线备用可能将语音发送给浏览器的识别服务</li>
+          <li>经本地服务器打开时默认使用设备本地 Vosk；直接双击 HTML 时使用在线语音备用，音频可能发送给浏览器识别服务</li>
           <li>本应用不保存原始录音，键盘模式始终可用</li>
           <li>清除浏览器数据会同时清除本地档案</li>
         </ul>
@@ -572,6 +572,7 @@ export default function App() {
     if (voice.state === 'loading') return voice.detail || '正在加载离线模型'
     if (!voice.configured) return '语音未配置 · 使用键盘'
     if (voice.state === 'error') return voice.detail || '语音暂不可用'
+    if (voice.engine === 'web-speech') return '启用在线语音备用'
     return '启用离线语音'
   }, [voice.configured, voice.detail, voice.engine, voice.state])
 

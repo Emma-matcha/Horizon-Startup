@@ -51,7 +51,7 @@ describe('Red House app', () => {
     await user.click(screen.getByRole('button', { name: '开始筛查' }))
 
     expect(
-      screen.getByText(/在线备用可能将语音发送给浏览器的识别服务/),
+      screen.getByText(/在线语音备用，音频可能发送给浏览器识别服务/),
     ).toBeInTheDocument()
   })
 })

@@ -2,6 +2,7 @@
 .pnpm-store/
 node_modules/
 dist/
+.single-html-build/
 coverage/
 playwright-report/
 test-results/

@@ -8,10 +8,15 @@ import {
   type VoiceState,
 } from './contracts'
 import { createRhinoController } from './rhino'
+import { resolveEmbeddedVoskModelPath } from './embeddedModel'
 import { createVoskController } from './vosk'
 import { createWebSpeechController, isWebSpeechAvailable } from './webSpeech'
 
 const DEFAULT_VOSK_MODEL_PATH = '/models/vosk-model-small-cn-0.22.tar'
+
+export function canUseBundledVosk(protocol: string): boolean {
+  return protocol !== 'file:'
+}
 
 function parsePreference(value: string | undefined): VoiceEnginePreference {
   return value === 'vosk' || value === 'web-speech' || value === 'rhino' || value === 'keyboard'
@@ -24,8 +29,11 @@ export function readVoiceConfiguration(): {
   preference: VoiceEnginePreference
   selectedEngine: VoiceEngineId
 } {
+  const protocol = typeof location === 'undefined' ? 'http:' : location.protocol
   const config: VoiceEngineConfig = {
-    voskModelPath: import.meta.env.VITE_VOSK_MODEL_PATH ?? DEFAULT_VOSK_MODEL_PATH,
+    voskModelPath: canUseBundledVosk(protocol)
+      ? (import.meta.env.VITE_VOSK_MODEL_PATH ?? DEFAULT_VOSK_MODEL_PATH)
+      : undefined,
     webSpeechAvailable: isWebSpeechAvailable(),
     rhinoAccessKey: import.meta.env.VITE_PICOVOICE_ACCESS_KEY,
     rhinoContextPath: import.meta.env.VITE_RHINO_CONTEXT_PATH,
@@ -50,7 +58,8 @@ export async function createVoiceController(
   const selectedEngine = resolveVoiceEngine(preference, config)
 
   if (selectedEngine === 'vosk' && config.voskModelPath) {
-    const controller = await createVoskController(config.voskModelPath, onCommand, onState)
+    const modelPath = await resolveEmbeddedVoskModelPath(config.voskModelPath)
+    const controller = await createVoskController(modelPath, onCommand, onState)
     if (controller || preference !== 'auto') return controller
   }
 
