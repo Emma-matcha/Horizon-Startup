@@ -6,7 +6,7 @@ import {
 } from './contracts'
 
 const SAMPLE_RATE = 16_000
-const MODEL_LOAD_TIMEOUT_MS = 20_000
+const MODEL_LOAD_TIMEOUT_MS = 60_000
 const COMMAND_GRAMMAR = JSON.stringify(['上', '下', '左', '右', '确认', '[unk]'])
 
 interface StoppableTrack {
@@ -27,7 +27,9 @@ interface ProcessorNodeLike extends Disconnectable {
 
 interface AudioContextLike {
   readonly sampleRate?: number
+  readonly state?: string
   close(): Promise<void> | void
+  resume?(): Promise<void> | void
 }
 
 interface VoskAudioGraph {
@@ -155,11 +157,13 @@ export async function createVoskController(
     if (reportIdle) onState('idle')
   }
 
-  onState('loading', '正在本地加载 Vosk 中文模型')
+  onState('loading', '正在请求麦克风权限')
   try {
-    model = await loadModelWithTimeout(modelPath, runtime)
     stream = await runtime.getUserMedia()
     graph = runtime.createAudioGraph(stream)
+    if (graph.audioContext.state === 'suspended') await graph.audioContext.resume?.()
+    onState('loading', '麦克风已打开 · 正在加载离线模型')
+    model = await loadModelWithTimeout(modelPath, runtime)
     recognizer = new model.KaldiRecognizer(
       graph.audioContext.sampleRate ?? SAMPLE_RATE,
       COMMAND_GRAMMAR,

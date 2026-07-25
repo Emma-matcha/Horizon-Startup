@@ -108,7 +108,7 @@ h1, h2, p { margin-top: 0; }
 .instruction-card--reference p { max-width: 760px; margin-bottom: 8px; }
 .instruction-card--reference strong { color: var(--green); font-size: 12px; line-height: 1.7; }
 .reference-guide-demo { display: grid; justify-items: center; min-width: 110px; }
-.reference-guide-demo span { font-family: ui-rounded, "SF Pro Rounded", "PingFang SC", "Microsoft YaHei UI", sans-serif; font-size: 28px; font-weight: 480; letter-spacing: .08em; }
+.reference-guide-demo span { font-family: "Avenir Next", "Segoe UI", Arial, sans-serif; font-size: 28px; font-weight: 500; letter-spacing: .04em; }
 .reference-guide-demo i { width: 58px; height: 2px; margin-top: 12px; background: var(--red); }
 .distance-visual { display: flex; align-items: center; height: 80px; }
 .screen-shape { width: 7px; height: 56px; border-radius: 2px; background: #ddd8cc; box-shadow: -7px 52px 0 4px #ddd8cc; }
@@ -145,7 +145,7 @@ h1, h2, p { margin-top: 0; }
 .optotype { display: grid; grid-template: repeat(5, 1fr) / repeat(5, 1fr); flex: none; }
 .optotype [data-cell='ink'] { background: #050505; }
 .optotype--animated { transform-origin: center; animation: symbol-arrive .72s cubic-bezier(.16,.9,.28,1) both; }
-.reference-word { display: block; color: #1c211d; font-family: ui-rounded, "SF Pro Rounded", "PingFang SC", "Microsoft YaHei UI", sans-serif; font-weight: 460; letter-spacing: .08em; line-height: 1; white-space: nowrap; transform-origin: center top; animation: reference-word-arrive .74s .08s cubic-bezier(.16,.9,.28,1) both; }
+.reference-word { display: block; color: #1c211d; font-family: "Avenir Next", "Segoe UI", Arial, sans-serif; font-weight: 500; letter-spacing: .04em; line-height: 1; white-space: nowrap; transform-origin: center top; animation: reference-word-arrive .74s .08s cubic-bezier(.16,.9,.28,1) both; }
 .voice-state { position: absolute; right: 32px; bottom: 30px; color: #a0a29b; font-size: 9px; letter-spacing: .08em; }
 .test-hint { position: absolute; left: 32px; bottom: 30px; margin: 0; color: #a0a29b; font-size: 9px; letter-spacing: .08em; }
 .direction-pad { position: absolute; left: 50%; bottom: 22px; display: grid; grid-template-columns: repeat(3, 34px); grid-template-rows: repeat(2, 34px); gap: 3px; opacity: .12; transform: translateX(-50%); transition: opacity .2s ease; }

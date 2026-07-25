@@ -8,9 +8,13 @@ export default defineConfig({
   reporter: 'list',
   use: {
     baseURL: 'http://127.0.0.1:4174',
+    permissions: ['microphone'],
     trace: 'retain-on-failure',
     ...devices['Desktop Chrome'],
-    channel: 'chrome'
+    channel: 'chrome',
+    launchOptions: {
+      args: ['--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream'],
+    },
   },
   webServer: {
     command: `${JSON.stringify(process.execPath)} node_modules/vite/bin/vite.js --host 127.0.0.1 --port 4174`,

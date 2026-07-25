@@ -44,7 +44,7 @@ test('runs the full two-eye flow from one offline HTML file', async ({ page }) =
   expect(externalRequests).toEqual([])
 })
 
-test('uses the browser microphone fallback when opened as a local file', async ({ page }) => {
+test('uses the disclosed browser microphone fallback when opened as a local file', async ({ page }) => {
   const externalRequests: string[] = []
   const consoleErrors: string[] = []
   page.on('request', (request) => {

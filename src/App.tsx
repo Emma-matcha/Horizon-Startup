@@ -36,6 +36,11 @@ import {
 } from './domain/testMachine'
 import type { Direction } from './domain/optotype'
 import { selectNextReferenceWord } from './domain/referenceWords'
+import {
+  getReferenceWordFontCssPx,
+  REFERENCE_WORD_FONT_FAMILY,
+  REFERENCE_WORD_FONT_WEIGHT,
+} from './domain/referenceWordSizing'
 import type { VoiceCommand, VoiceScope } from './voice/contracts'
 import { useVoiceInput } from './voice/useVoiceInput'
 
@@ -197,15 +202,15 @@ function SettingsDialog({
         <button aria-label="关闭设置" className="close-button" onClick={onClose}>×</button>
         <p className="eyebrow">DISPLAY</p>
         <h2 id="settings-title">测试显示设置</h2>
-        <p>选择正式测试时是否在 E 字视标下方显示生活参考词。</p>
+        <p>选择正式测试时是否在 E 字视标下方显示英文生活单词。</p>
         <button
           aria-checked={referenceWordsEnabled}
-          aria-label="显示生活参考词"
+          aria-label="显示英文参考词"
           className="settings-switch"
           onClick={onToggleReferenceWords}
           role="switch"
         >
-          <span><strong>生活参考词</strong><small>与当前视标使用相同尺寸</small></span>
+          <span><strong>英文参考词</strong><small>字形高度与当前视标一致</small></span>
           <i aria-hidden="true" />
         </button>
         <small className="settings-note">此选项只影响显示，不会改变测试分数。设置仅保存在当前浏览器。</small>
@@ -223,7 +228,7 @@ function ConsentDialog({ onAccept, onClose }: { onAccept: () => void; onClose: (
         <p>结果会受屏幕、距离、光线、疲劳和操作影响，仅用于居家趋势参考。若出现突然视力变化、眼痛或持续模糊，请及时就医。</p>
         <ul>
           <li>昵称、筛查结果与历史趋势仅保存在此浏览器</li>
-          <li>经本地服务器打开时默认使用设备本地 Vosk；直接双击 HTML 时使用在线语音备用，音频可能发送给浏览器识别服务</li>
+          <li>经本地网址打开时默认使用设备本地 Vosk；直接双击 HTML 时使用在线语音备用，音频可能发送给浏览器识别服务</li>
           <li>本应用不保存原始录音，键盘模式始终可用</li>
           <li>清除浏览器数据会同时清除本地档案</li>
         </ul>
@@ -294,11 +299,11 @@ function SetupPage({
         <article className="instruction-card instruction-card--reference">
           <span className="step-number">04</span>
           <div>
-            <h2>生活单词参考</h2>
-            <p>测试时，E 字视标正下方会出现一个每次变化的双字生活词。单词字号与 E 字视标使用完全相同的尺寸数值，帮助你感受真实生活中的阅读效果。</p>
+            <h2>英文单词参考</h2>
+            <p>测试时，E 字视标正下方会出现一个每次变化的英文生活词。系统先用两米视角与实体尺校准公式算出视标物理高度，再读取当前字体的真实字形边界，反算字号，使单词字形高度与 E 字视标边长一致。</p>
             <strong>它只用于直观参考，不会参与评分。可返回主页，通过齿轮设置随时关闭或开启。</strong>
           </div>
-          <div className="reference-guide-demo" aria-hidden="true"><span>远山</span><i /></div>
+          <div className="reference-guide-demo" aria-hidden="true"><span>clear</span><i /></div>
         </article>
       </section>
       <div className="setup-actions">
@@ -351,6 +356,7 @@ function TestPage({
   showReferenceWord: boolean
 }) {
   const displaySize = getCalibratedOptotypeCssPx(state.level, calibrationPx)
+  const referenceWordFontSize = getReferenceWordFontCssPx(referenceWord, displaySize)
   return (
     <main className="test-page">
       <div className="test-meta">
@@ -367,10 +373,15 @@ function TestPage({
         <Optotype calibrationPx={calibrationPx} className="optotype--animated" direction={direction} level={state.level} />
         {showReferenceWord && (
           <span
-            aria-label={`生活参考词：${referenceWord}`}
+            aria-label={`英文参考词：${referenceWord}`}
             className="reference-word"
             data-size={displaySize.toFixed(2)}
-            style={{ fontSize: `${displaySize}px` }}
+            data-target-height={displaySize.toFixed(4)}
+            style={{
+              fontFamily: REFERENCE_WORD_FONT_FAMILY,
+              fontSize: `${referenceWordFontSize}px`,
+              fontWeight: REFERENCE_WORD_FONT_WEIGHT,
+            }}
           >
             {referenceWord}
           </span>
@@ -668,7 +679,7 @@ export default function App() {
     if (!voice.configured) return '语音未配置 · 使用键盘'
     if (voice.state === 'error') return voice.detail || '语音暂不可用'
     if (voice.engine === 'web-speech') return '启用在线语音备用'
-    return '启用离线语音'
+    return '打开离线麦克风'
   }, [voice.configured, voice.detail, voice.engine, voice.state])
 
   const beginFromHome = () => {

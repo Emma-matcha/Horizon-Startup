@@ -26,27 +26,61 @@ test('offers physical screen calibration for Windows displays', async ({ page })
   await expect(page.getByRole('status')).toHaveText('158 px')
 })
 
-test('renders a fresh same-size life word beneath each optotype', async ({ page }) => {
+test('opens the bundled offline microphone from the locally served single HTML', async ({ page }) => {
+  test.setTimeout(90_000)
+  const externalRequests: string[] = []
+  page.on('request', (request) => {
+    const url = new URL(request.url())
+    if (url.protocol.startsWith('http') && url.hostname !== '127.0.0.1') {
+      externalRequests.push(request.url())
+    }
+  })
+  const app = new VisionPage(page)
+  await app.goto('/red-house-vision.html?test=1')
+  await app.enterScreening()
+
+  await page.getByRole('button', { name: '打开离线麦克风' }).click()
+  await expect(page.getByRole('button', { name: /麦克风已打开/ })).toBeVisible({ timeout: 5_000 })
+  await expect(page.getByRole('button', { name: 'Vosk 本地语音已开启' })).toBeVisible({
+    timeout: 70_000,
+  })
+  expect(externalRequests).toEqual([])
+})
+
+test('renders a fresh physically matched English word beneath each optotype', async ({ page }) => {
   const app = new VisionPage(page)
   await app.goto()
   await app.enterScreening()
 
-  await expect(page.getByRole('heading', { name: '生活单词参考' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '英文单词参考' })).toBeVisible()
   await expect(page.getByText(/不会参与评分/)).toBeVisible()
   await app.startEye()
 
-  const mark = page.locator('.optotype')
   const word = page.locator('.reference-word')
   await expect(word).toBeVisible()
-  const firstWord = await word.textContent()
-  const dimensions = await Promise.all([
-    mark.evaluate((element) => Number.parseFloat((element as HTMLElement).style.width)),
-    word.evaluate((element) => Number.parseFloat((element as HTMLElement).style.fontSize)),
-  ])
-  expect(dimensions[1]).toBe(dimensions[0])
-
-  await app.answerCurrentDirection()
-  await expect(word).not.toHaveText(firstWord ?? '')
+  let previousWord = ''
+  for (let levelIndex = 0; levelIndex < 7; levelIndex += 1) {
+    await expect(word).toHaveText(/^[a-z]{3,6}$/)
+    await expect(word).not.toHaveText(previousWord)
+    const dimensions = await word.evaluate((element) => {
+      const style = getComputedStyle(element)
+      const canvas = document.createElement('canvas')
+      const context = canvas.getContext('2d')
+      if (!context) throw new Error('Canvas text metrics unavailable')
+      context.font = `${style.fontWeight} ${style.fontSize} ${style.fontFamily}`
+      const metrics = context.measureText(element.textContent ?? '')
+      const optotype = document.querySelector<HTMLElement>('.optotype')
+      return {
+        glyphInkHeight: metrics.actualBoundingBoxAscent + metrics.actualBoundingBoxDescent,
+        optotypeEdge: Number.parseFloat(optotype?.style.width ?? ''),
+        targetHeight: Number.parseFloat((element as HTMLElement).dataset.targetHeight ?? ''),
+      }
+    })
+    expect(dimensions.targetHeight).toBeCloseTo(dimensions.optotypeEdge, 3)
+    expect(dimensions.glyphInkHeight).toBeCloseTo(dimensions.targetHeight, 1)
+    previousWord = (await word.textContent()) ?? ''
+    if (levelIndex < 6) await app.answerCurrentDirection()
+  }
 })
 
 test('persists the home gear switch and hides reference words when disabled', async ({ page }) => {
@@ -54,7 +88,7 @@ test('persists the home gear switch and hides reference words when disabled', as
   await app.goto()
 
   await page.getByRole('button', { name: '打开设置' }).click()
-  const toggle = page.getByRole('switch', { name: '显示生活参考词' })
+  const toggle = page.getByRole('switch', { name: '显示英文参考词' })
   await expect(toggle).toHaveAttribute('aria-checked', 'true')
   await toggle.click()
   await expect(toggle).toHaveAttribute('aria-checked', 'false')
@@ -62,7 +96,7 @@ test('persists the home gear switch and hides reference words when disabled', as
 
   await page.reload()
   await page.getByRole('button', { name: '打开设置' }).click()
-  await expect(page.getByRole('switch', { name: '显示生活参考词' })).toHaveAttribute(
+  await expect(page.getByRole('switch', { name: '显示英文参考词' })).toHaveAttribute(
     'aria-checked',
     'false',
   )

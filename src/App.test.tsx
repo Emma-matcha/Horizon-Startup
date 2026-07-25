@@ -20,7 +20,7 @@ describe('Red House app', () => {
     render(<App />)
 
     await user.click(screen.getByRole('button', { name: '打开设置' }))
-    const toggle = screen.getByRole('switch', { name: '显示生活参考词' })
+    const toggle = screen.getByRole('switch', { name: '显示英文参考词' })
     expect(toggle).toHaveAttribute('aria-checked', 'true')
 
     await user.click(toggle)
@@ -39,8 +39,9 @@ describe('Red House app', () => {
 
     expect(screen.getByText('Windows 显示缩放 100%')).toBeInTheDocument()
     expect(screen.getByText(/不依赖屏幕型号或分辨率/)).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: '生活单词参考' })).toBeInTheDocument()
-    expect(screen.getByText(/与 E 字视标使用完全相同的尺寸数值/)).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '英文单词参考' })).toBeInTheDocument()
+    expect(screen.getByText(/真实字形边界/)).toBeInTheDocument()
+    expect(screen.getByText(/字形高度与 E 字视标边长一致/)).toBeInTheDocument()
     expect(screen.getByText(/不会参与评分/)).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '打开设置' })).not.toBeInTheDocument()
 

@@ -35,7 +35,7 @@ describe('voice command contract', () => {
 })
 
 describe('voice engine selection', () => {
-  it('uses bundled Vosk over HTTP but not from an opaque file origin', () => {
+  it('uses bundled Vosk over a local site but not from an opaque file origin', () => {
     expect(canUseBundledVosk('http:')).toBe(true)
     expect(canUseBundledVosk('https:')).toBe(true)
     expect(canUseBundledVosk('file:')).toBe(false)
@@ -92,21 +92,62 @@ describe('voice engine selection', () => {
 })
 
 describe('Vosk controller lifecycle', () => {
+  it('opens the microphone before waiting for the large offline model', async () => {
+    const order: string[] = []
+    const runtime: VoskRuntime = {
+      getUserMedia: vi.fn().mockImplementation(async () => {
+        order.push('microphone')
+        return { getTracks: () => [{ stop: vi.fn() }] }
+      }),
+      createModel: vi.fn().mockImplementation(async () => {
+        order.push('model')
+        return {
+          KaldiRecognizer: class {
+            on() {}
+            acceptWaveform() {}
+            remove() {}
+            setWords() {}
+          },
+          terminate() {},
+        }
+      }),
+      createAudioGraph: vi.fn().mockImplementation(() => {
+        order.push('audio')
+        return {
+          audioContext: { close: vi.fn(), sampleRate: 16_000 },
+          source: { disconnect: vi.fn() },
+          processor: { disconnect: vi.fn(), onaudioprocess: null },
+          gain: { disconnect: vi.fn() },
+        }
+      }),
+    }
+
+    const controller = await createVoskController('/models/cn.tar', vi.fn(), vi.fn(), runtime)
+
+    expect(order).toEqual(['microphone', 'audio', 'model'])
+    await controller?.stop()
+  })
+
   it('stops waiting for a model that never finishes loading', async () => {
     vi.useFakeTimers()
     try {
       const onState = vi.fn()
       const runtime: VoskRuntime = {
         createModel: vi.fn().mockReturnValue(new Promise(() => undefined)),
-        getUserMedia: vi.fn(),
-        createAudioGraph: vi.fn(),
+        getUserMedia: vi.fn().mockResolvedValue({ getTracks: () => [] }),
+        createAudioGraph: vi.fn().mockReturnValue({
+          audioContext: { close: vi.fn(), sampleRate: 16_000 },
+          source: { disconnect: vi.fn() },
+          processor: { disconnect: vi.fn(), onaudioprocess: null },
+          gain: { disconnect: vi.fn() },
+        }),
       }
       let settled = false
 
       void createVoskController('/models/cn.tar.gz', vi.fn(), onState, runtime).then(() => {
         settled = true
       })
-      await vi.advanceTimersByTimeAsync(20_000)
+      await vi.advanceTimersByTimeAsync(60_000)
 
       expect(settled).toBe(true)
       expect(onState).toHaveBeenLastCalledWith(
@@ -212,7 +253,8 @@ describe('Vosk controller lifecycle', () => {
     ).resolves.toBeNull()
 
     expect(onState).toHaveBeenLastCalledWith('error', '麦克风权限被拒绝，已切换键盘模式')
-    expect(terminate).toHaveBeenCalledOnce()
+    expect(runtime.createModel).not.toHaveBeenCalled()
+    expect(terminate).not.toHaveBeenCalled()
   })
 
   it.each([
@@ -220,10 +262,20 @@ describe('Vosk controller lifecycle', () => {
     [new Error('model corrupt'), '离线语音模型启动失败，已切换键盘模式'],
   ])('maps startup failures to a safe keyboard fallback', async (failure, detail) => {
     const onState = vi.fn()
+    const microphoneFailure = failure instanceof DOMException && failure.name === 'NotFoundError'
     const runtime: VoskRuntime = {
-      createModel: vi.fn().mockRejectedValue(failure),
-      getUserMedia: vi.fn(),
-      createAudioGraph: vi.fn(),
+      createModel: microphoneFailure
+        ? vi.fn()
+        : vi.fn().mockRejectedValue(failure),
+      getUserMedia: microphoneFailure
+        ? vi.fn().mockRejectedValue(failure)
+        : vi.fn().mockResolvedValue({ getTracks: () => [] }),
+      createAudioGraph: vi.fn().mockReturnValue({
+        audioContext: { close: vi.fn(), sampleRate: 16_000 },
+        source: { disconnect: vi.fn() },
+        processor: { disconnect: vi.fn(), onaudioprocess: null },
+        gain: { disconnect: vi.fn() },
+      }),
     }
 
     await expect(

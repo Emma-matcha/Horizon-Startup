@@ -3,9 +3,9 @@ import { describe, expect, it } from 'vitest'
 import { REFERENCE_WORDS, selectNextReferenceWord } from './referenceWords'
 
 describe('reference word selection', () => {
-  it('ships a varied set of short everyday Chinese words', () => {
+  it('ships a varied set of short everyday English words', () => {
     expect(REFERENCE_WORDS.length).toBeGreaterThanOrEqual(24)
-    expect(REFERENCE_WORDS.every((word) => [...word].length === 2)).toBe(true)
+    expect(REFERENCE_WORDS.every((word) => /^[a-z]{3,6}$/.test(word))).toBe(true)
     expect(new Set(REFERENCE_WORDS).size).toBe(REFERENCE_WORDS.length)
   })
 
