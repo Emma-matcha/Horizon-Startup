@@ -9,7 +9,7 @@
   },
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "tsc -b && vite build && node scripts/vosk-model-parts.mjs && node scripts/verify-edgeone-build.mjs",
     "build:single": "tsc -b && node scripts/build-single-html.mjs",
     "preview": "vite preview",
     "start": "vite preview --host 127.0.0.1 --port 4173",
@@ -17,6 +17,7 @@
     "lint": "eslint .",
     "test": "vitest run",
     "test:model-parts": "node --test scripts/vosk-model-parts.test.mjs",
+    "test:edgeone-build": "node --test scripts/verify-edgeone-build.test.mjs",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "e2e": "playwright test",
