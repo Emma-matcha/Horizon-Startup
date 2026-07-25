@@ -48,7 +48,7 @@
 - `X-Content-Type-Options: nosniff`
 - `Referrer-Policy: no-referrer`
 - `Permissions-Policy: camera=(), geolocation=(), microphone=(self)`
-- 单页应用回退到 `/index.html`
+- 根入口由 `/index.html` 提供；当前应用没有客户端 URL 路由，不添加 EdgeOne 不支持的 SPA 通配回退
 - 模型分片和指纹静态资源的长期缓存；HTML 和模型清单使用可重新验证缓存
 
 ## 测试与验收
@@ -59,7 +59,7 @@
 - 分片按清单顺序重组后与原模型字节完全一致，SHA-256 一致。
 - 分片缺失、网络失败、长度不符和超时时触发备用输入。
 - `dist` 中不存在超过 25 MB 的文件，也不存在未分片的模型 tar。
-- `edgeone.json` 包含所需响应头和 SPA 回退规则。
+- `edgeone.json` 包含所需响应头，且 `dist/index.html` 位于上传根目录。
 - 现有单元测试、类型检查和生产构建通过。
 
 预览环境人工验收：
