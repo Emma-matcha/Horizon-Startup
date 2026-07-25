@@ -32,6 +32,10 @@ pnpm start
 
 然后访问 <http://127.0.0.1:4173/>。
 
+## 黑群晖 NAS 部署
+
+项目已提供 `Dockerfile`、`nginx.conf` 和 `docker-compose.yml`，可通过群晖 Container Manager 部署。针对 `10.0.0.2:5000` 的完整步骤见 [NAS部署说明.md](./NAS部署说明.md)。网站默认使用 NAS 的 `8088` 端口，不占用 DSM 管理端口 `5000`。
+
 ## 输入方式
 
 - 默认语音：内置 Vosk WASM 中文小模型，无需账号或 AccessKey，识别在本机完成。

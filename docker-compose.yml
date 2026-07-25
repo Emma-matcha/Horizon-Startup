@@ -1,0 +1,9 @@
+services:
+  red-house:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: red-house-vision
+    restart: unless-stopped
+    ports:
+      - "8088:80"

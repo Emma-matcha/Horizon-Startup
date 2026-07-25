@@ -1,0 +1,10 @@
+.git
+.DS_Store
+node_modules
+dist
+coverage
+playwright-report
+test-results
+tmp
+docs
+*.log
