@@ -447,7 +447,7 @@ export default function App() {
   const [count, setCount] = useState(3)
   const [eye, setEye] = useState<Eye>('right')
   const [eyeState, setEyeState] = useState<EyeTestState>(() => createEyeTestState())
-  const [direction, setDirection] = useState<Direction>('right')
+  const [direction, setDirection] = useState<Direction>(() => selectNextDirection([]))
   const [directionHistory, setDirectionHistory] = useState<Direction[]>([])
   const [answers, setAnswers] = useState<AnswerRecord[]>([])
   const [results, setResults] = useState<Partial<Record<Eye, number>>>({})
@@ -463,7 +463,7 @@ export default function App() {
   const resetTest = useCallback(() => {
     setEye('right')
     setEyeState(createEyeTestState())
-    setDirection('right')
+    setDirection(selectNextDirection([]))
     setDirectionHistory([])
     setAnswers([])
     setResults({})
@@ -485,7 +485,7 @@ export default function App() {
           setResults({ right: score })
           setEye('left')
           setEyeState(createEyeTestState())
-          setDirection('left')
+          setDirection(selectNextDirection([direction]))
           setDirectionHistory([])
           setSymbolReady(false)
           setView('eyeSwitch')
@@ -507,9 +507,9 @@ export default function App() {
 
       const nextHistory = [...directionHistory, direction]
       setDirectionHistory(nextHistory)
-      setDirection(selectNextDirection(nextHistory, Date.now() + answers.length * 31))
+      setDirection(selectNextDirection(nextHistory))
     },
-    [answers.length, direction, directionHistory, eye, eyeState, results.right, symbolReady, view],
+    [direction, directionHistory, eye, eyeState, results.right, symbolReady, view],
   )
 
   const onVoiceCommand = useCallback(

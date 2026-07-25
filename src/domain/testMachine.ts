@@ -77,12 +77,48 @@ export function applyEyeAnswer(
 
 export function selectNextDirection(
   history: readonly Direction[],
-  seed = Math.random() * 1_000_000,
+  random: () => number = secureRandomUnit,
 ): Direction {
   const previous = history.at(-1)
-  const candidates = previous
+  const nonRepeating = previous
     ? DIRECTIONS.filter((direction) => direction !== previous)
     : [...DIRECTIONS]
-  const stableSeed = Math.abs(Math.trunc(seed))
-  return candidates[stableSeed % candidates.length]
+  const irregularCandidates = nonRepeating.filter(
+    (direction) =>
+      !wouldRepeatPattern(history, direction, 2) &&
+      !wouldRepeatPattern(history, direction, 3),
+  )
+  const candidates = irregularCandidates.length > 0 ? irregularCandidates : nonRepeating
+  const draw = random()
+  const normalizedDraw = Number.isFinite(draw)
+    ? Math.min(Math.max(draw, 0), 1 - Number.EPSILON)
+    : 0
+
+  return candidates[Math.floor(normalizedDraw * candidates.length)]
+}
+
+function wouldRepeatPattern(
+  history: readonly Direction[],
+  candidate: Direction,
+  patternLength: number,
+): boolean {
+  const sequence = [...history, candidate]
+  if (sequence.length < patternLength * 2) return false
+
+  const start = sequence.length - patternLength * 2
+  for (let offset = 0; offset < patternLength; offset += 1) {
+    if (sequence[start + offset] !== sequence[start + patternLength + offset]) {
+      return false
+    }
+  }
+  return true
+}
+
+function secureRandomUnit(): number {
+  if (globalThis.crypto?.getRandomValues) {
+    const entropy = new Uint32Array(1)
+    globalThis.crypto.getRandomValues(entropy)
+    return entropy[0] / 0x1_0000_0000
+  }
+  return Math.random()
 }

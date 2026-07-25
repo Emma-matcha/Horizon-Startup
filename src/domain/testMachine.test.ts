@@ -78,14 +78,68 @@ describe('eye test state machine', () => {
 })
 describe('selectNextDirection', () => {
   it('never repeats the immediately previous direction', () => {
-    for (let seed = 0; seed < 100; seed += 1) {
-      expect(selectNextDirection(['left'], seed)).not.toBe('left')
+    for (let draw = 0; draw < 100; draw += 1) {
+      expect(selectNextDirection(['left'], () => draw / 100)).not.toBe('left')
     }
   })
 
   it('returns one of the four supported directions', () => {
     expect(['up', 'right', 'down', 'left']).toContain(
-      selectNextDirection([], 42),
+      selectNextDirection([], () => 0.42),
     )
+  })
+
+  it('can select every direction instead of favoring a fixed starting side', () => {
+    const selected = [0, 0.25, 0.5, 0.999999].map((draw) =>
+      selectNextDirection([], () => draw),
+    )
+
+    expect(new Set(selected)).toEqual(new Set(['up', 'right', 'down', 'left']))
+  })
+
+  it('does not complete an obvious A-B-A-B alternation', () => {
+    expect(selectNextDirection(['up', 'left', 'up'], () => 0)).not.toBe('left')
+  })
+
+  it('does not repeat the same three-direction cycle', () => {
+    expect(
+      selectNextDirection(['up', 'right', 'down', 'up', 'right'], () => 0),
+    ).not.toBe('down')
+  })
+
+  it('produces an irregular deterministic sample without short repeated patterns', () => {
+    let state = 0x9e3779b9
+    const random = () => {
+      state = (Math.imul(state, 1664525) + 1013904223) >>> 0
+      return state / 0x1_0000_0000
+    }
+    const history: Array<'up' | 'right' | 'down' | 'left'> = []
+
+    for (let index = 0; index < 120; index += 1) {
+      history.push(selectNextDirection(history, random))
+    }
+
+    expect(new Set(history)).toHaveLength(4)
+    for (let index = 1; index < history.length; index += 1) {
+      expect(history[index]).not.toBe(history[index - 1])
+    }
+    for (let index = 3; index < history.length; index += 1) {
+      expect(history.slice(index - 3, index + 1)).not.toEqual([
+        history[index - 3],
+        history[index - 2],
+        history[index - 3],
+        history[index - 2],
+      ])
+    }
+    for (let index = 5; index < history.length; index += 1) {
+      expect(history.slice(index - 5, index + 1)).not.toEqual([
+        history[index - 5],
+        history[index - 4],
+        history[index - 3],
+        history[index - 5],
+        history[index - 4],
+        history[index - 3],
+      ])
+    }
   })
 })
