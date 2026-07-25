@@ -10,14 +10,14 @@ const projectRoot = resolve(scriptDirectory, '..')
 const temporaryDirectory = resolve(projectRoot, '.single-html-build')
 const temporaryHtmlPath = resolve(temporaryDirectory, 'index.html')
 const outputPath = resolve(projectRoot, 'red-house-vision.html')
-const heroPath = resolve(projectRoot, 'public/assets/church-meadow-hero.jpg')
-const modelPath = resolve(projectRoot, 'public/models/vosk-model-small-cn-0.22.tar')
+const heroPath = resolve(projectRoot, 'public/assets/red-house-hero-v2.png')
+const modelPath = resolve(projectRoot, 'models/vosk-model-small-cn-0.22.tar')
 
 function assertStandalone(html) {
   const forbiddenPatterns = [
     [/<script\b[^>]*\bsrc\s*=/i, 'external script tag'],
     [/<link\b[^>]*\brel=["']stylesheet["'][^>]*>/i, 'external stylesheet'],
-    [/url\(["']?(?:\.\/|\/)?assets\/church-meadow-hero\.jpg["']?\)/i, 'external hero image'],
+    [/(?:\.\/|\/)assets\/red-house-hero-v2\.png/i, 'external hero image'],
   ]
 
   for (const [pattern, label] of forbiddenPatterns) {
@@ -26,7 +26,7 @@ function assertStandalone(html) {
   if (!html.includes('id="embedded-vosk-model"')) {
     throw new Error('Single HTML does not contain the embedded Vosk model')
   }
-  if (!html.includes('data:image/jpeg;base64,')) {
+  if (!html.includes('data:image/png;base64,')) {
     throw new Error('Single HTML does not contain the embedded hero image')
   }
 }
@@ -39,13 +39,13 @@ async function main() {
     readFile(heroPath),
     readFile(modelPath),
   ])
-  const heroDataUrl = `data:image/jpeg;base64,${hero.toString('base64')}`
+  const heroDataUrl = `data:image/png;base64,${hero.toString('base64')}`
   const modelBase64 = model.toString('base64')
   const modelSha256 = createHash('sha256').update(model).digest('hex')
 
   let standaloneHtml = builtHtml
-    .replaceAll('/assets/church-meadow-hero.jpg', heroDataUrl)
-    .replaceAll('./assets/church-meadow-hero.jpg', heroDataUrl)
+    .replaceAll('/assets/red-house-hero-v2.png', heroDataUrl)
+    .replaceAll('./assets/red-house-hero-v2.png', heroDataUrl)
 
   const embeddedModel = [
     '<script',

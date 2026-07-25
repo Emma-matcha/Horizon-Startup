@@ -5,11 +5,12 @@
 ## Vosk（默认）
 
 1. 下载官方 `vosk-model-small-cn-0.22.zip`。
-2. 解压后把顶层目录改名为 `model`，再 gzip 打包并以 `vosk-model-small-cn-0.22.tar` 发布。保留 `.tar` URL 是为了避免 Vite 把 `.tar.gz` 错当成 HTTP Content-Encoding 后提前解压。
-3. 将压缩包放入本目录，保持 `.env.example` 中的默认公开路径。
-4. 首次加载后关闭网络重载，确认模型和 Worker 均从本地站点读取。
+2. 解压后把顶层目录改名为 `model`，再 gzip 打包并保存为 `vosk-model-small-cn-0.22.tar`。保留 `.tar` 格式是为了避免服务器把 `.tar.gz` 错当成 HTTP Content-Encoding 后提前解压。
+3. 将压缩包和 SHA-256 文件放入仓库根目录的 `models/`。源模型不会被 Vite 直接复制到公开产物。
+4. `pnpm build` 会把源模型拆分成 EdgeOne 可接受的小文件，并写入 `dist/models/`。
+5. 首次加载后关闭网络重载，确认模型分片和 Worker 均从本地站点读取。
 
-当前仓库已经包含转换后的模型：
+当前仓库的 `models/` 已经包含转换后的模型：
 
 - 来源：`https://alphacephei.com/vosk/models/vosk-model-small-cn-0.22.zip`
 - 许可证：Apache-2.0

@@ -39,7 +39,7 @@ try {
   & $runner run build
   if ($LASTEXITCODE -ne 0) { throw 'Production build failed.' }
 
-  $voskModel = Join-Path $projectRoot 'public\models\vosk-model-small-cn-0.22.tar'
+  $voskModel = Join-Path $projectRoot 'models\vosk-model-small-cn-0.22.tar'
   if (-not (Test-Path -LiteralPath $voskModel)) {
     throw 'The bundled offline Vosk model is missing.'
   }

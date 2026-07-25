@@ -18,10 +18,8 @@ test('runs the full two-eye flow from one offline HTML file', async ({ page }) =
 
   await expect(page.locator('.home__scene')).toHaveCount(1)
   await expect(
-    page.locator('.home__scene').evaluate((element) =>
-      getComputedStyle(element).backgroundImage.startsWith('url("data:image/jpeg;base64,'),
-    ),
-  ).resolves.toBe(true)
+    page.locator('.home__house').getAttribute('src'),
+  ).resolves.toMatch(/^data:image\/png;base64,/)
 
   const modelMetadata = await page.locator('#embedded-vosk-model').evaluate((element) => ({
     bytes: Number(element.getAttribute('data-byte-length')),
