@@ -64,7 +64,7 @@ function validateManifest(value: unknown): VoskModelManifest {
   return manifest as VoskModelManifest
 }
 
-function bytesToSha256Hex(bytes: Uint8Array): Promise<string> {
+function bytesToSha256Hex(bytes: Uint8Array<ArrayBuffer>): Promise<string> {
   if (!globalThis.crypto?.subtle) {
     throw new Error('Web Crypto is required to verify the Vosk model')
   }
