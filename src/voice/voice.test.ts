@@ -58,6 +58,15 @@ describe('voice engine selection', () => {
     ).toBe('rhino')
   })
 
+  it('selects the online engine only when the browser API is available', () => {
+    expect(resolveVoiceEngine('web-speech', { webSpeechAvailable: true })).toBe(
+      'web-speech',
+    )
+    expect(resolveVoiceEngine('web-speech', { webSpeechAvailable: false })).toBe(
+      'keyboard',
+    )
+  })
+
   it('falls back to keyboard when the requested engine is not configured', () => {
     expect(resolveVoiceEngine('vosk', {})).toBe('keyboard')
     expect(resolveVoiceEngine('rhino', {})).toBe('keyboard')

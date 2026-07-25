@@ -171,7 +171,8 @@ function ConsentDialog({ onAccept, onClose }: { onAccept: () => void; onClose: (
         <p>结果会受屏幕、距离、光线、疲劳和操作影响，仅用于居家趋势参考。若出现突然视力变化、眼痛或持续模糊，请及时就医。</p>
         <ul>
           <li>昵称、筛查结果与历史趋势仅保存在此浏览器</li>
-          <li>语音模式在设备本地识别，键盘模式始终可用</li>
+          <li>默认使用设备本地 Vosk；在线备用可能将语音发送给浏览器的识别服务</li>
+          <li>本应用不保存原始录音，键盘模式始终可用</li>
           <li>清除浏览器数据会同时清除本地档案</li>
         </ul>
         <div className="modal-actions">
@@ -188,12 +189,14 @@ function SetupPage({
   onCalibration,
   onStart,
   onVoice,
+  onOnlineVoice,
   voiceLabel,
 }: {
   calibrationPx: number
   onCalibration: (value: number) => void
   onStart: () => void
   onVoice: () => void
+  onOnlineVoice: () => void
   voiceLabel: string
 }) {
   return (
@@ -241,9 +244,12 @@ function SetupPage({
         <button className="secondary-button voice-button" onClick={onVoice}>
           <span className="mic-dot" aria-hidden="true" />{voiceLabel}
         </button>
+        <button className="secondary-button online-voice-button" onClick={onOnlineVoice}>
+          使用在线语音备用
+        </button>
         <button className="primary-button" onClick={onStart}>我已站好，开始右眼测试</button>
       </div>
-      <p className="setup-note">也可说“确认”。测试中说“上、下、左、右”，或使用键盘方向键。</p>
+      <p className="setup-note">在线备用需联网，语音可能由浏览器服务处理；本应用不保存录音。也可使用键盘方向键。</p>
     </main>
   )
 }
@@ -555,9 +561,11 @@ export default function App() {
 
   const voiceLabel = useMemo(() => {
     if (voice.state === 'listening') {
-      return voice.engine === 'vosk' ? 'Vosk 本地语音已开启' : 'Rhino 本地语音已开启'
+      if (voice.engine === 'vosk') return 'Vosk 本地语音已开启'
+      if (voice.engine === 'web-speech') return '在线语音备用已开启'
+      return 'Rhino 本地语音已开启'
     }
-    if (voice.state === 'loading') return '正在加载离线模型'
+    if (voice.state === 'loading') return voice.detail || '正在加载离线模型'
     if (!voice.configured) return '语音未配置 · 使用键盘'
     if (voice.state === 'error') return voice.detail || '语音暂不可用'
     return '启用离线语音'
@@ -576,7 +584,7 @@ export default function App() {
       case 'home':
         return <HomePage onProfile={() => setShowProfile(true)} onStart={beginFromHome} />
       case 'setup':
-        return <SetupPage calibrationPx={calibrationPx} onCalibration={setCalibrationPx} onStart={startCountdown} onVoice={() => void voice.activate()} voiceLabel={voiceLabel} />
+        return <SetupPage calibrationPx={calibrationPx} onCalibration={setCalibrationPx} onOnlineVoice={() => void voice.activate('web-speech')} onStart={startCountdown} onVoice={() => void voice.activate()} voiceLabel={voiceLabel} />
       case 'countdown':
         return <CountdownPage count={count} eye={eye} />
       case 'test':

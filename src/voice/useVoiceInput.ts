@@ -4,6 +4,7 @@ import {
   isCommandAllowed,
   type VoiceCommand,
   type VoiceController,
+  type VoiceEnginePreference,
   type VoiceScope,
   type VoiceState,
 } from './contracts'
@@ -29,10 +30,13 @@ export function useVoiceInput(
     scopeRef.current = scope
   }, [scope])
 
-  const activate = useCallback(async () => {
-    if (controllerRef.current || activatingRef.current) return
+  const activate = useCallback(async (preference?: VoiceEnginePreference) => {
+    if (activatingRef.current) return
     activatingRef.current = true
     try {
+      const previousController = controllerRef.current
+      controllerRef.current = null
+      if (previousController) await previousController.stop()
       const controller = await createVoiceController(
         (command) => {
           if (isCommandAllowed(command, scopeRef.current)) callbackRef.current(command)
@@ -41,6 +45,7 @@ export function useVoiceInput(
           setState(nextState)
           setDetail(nextDetail)
         },
+        preference,
       )
       controllerRef.current = controller
       if (controller) setEngine(controller.engine)

@@ -1,7 +1,7 @@
 import type { Direction } from '../domain/optotype'
 
 export type VoiceCommand = Direction | 'confirm'
-export type VoiceEngineId = 'vosk' | 'rhino' | 'keyboard'
+export type VoiceEngineId = 'vosk' | 'web-speech' | 'rhino' | 'keyboard'
 export type VoiceEnginePreference = VoiceEngineId | 'auto'
 export type VoiceScope = 'distance-confirmation' | 'direction-test'
 export type VoiceState =
@@ -19,6 +19,7 @@ export interface VoiceController {
 
 export interface VoiceEngineConfig {
   voskModelPath?: string
+  webSpeechAvailable?: boolean
   rhinoAccessKey?: string
   rhinoContextPath?: string
   rhinoModelPath?: string
@@ -52,8 +53,12 @@ export function resolveVoiceEngine(
 
   if (preference === 'keyboard') return 'keyboard'
   if (preference === 'vosk') return hasVosk ? 'vosk' : 'keyboard'
+  if (preference === 'web-speech') {
+    return config.webSpeechAvailable ? 'web-speech' : 'keyboard'
+  }
   if (preference === 'rhino') return hasRhino ? 'rhino' : 'keyboard'
   if (hasVosk) return 'vosk'
+  if (config.webSpeechAvailable) return 'web-speech'
   if (hasRhino) return 'rhino'
   return 'keyboard'
 }

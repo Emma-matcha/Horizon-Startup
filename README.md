@@ -26,8 +26,10 @@ pnpm start
 
 ## 输入方式
 
-- 默认：键盘方向键，能够完整演示所有页面。
-- 离线语音：Picovoice Rhino Web。模型和 AccessKey 不会提交到 Git；按 `public/models/README.md` 配置 `.env.local` 后重新构建。
+- 默认语音：内置 Vosk WASM 中文小模型，无需账号或 AccessKey，识别在本机完成。
+- 在线备用：环境页点击“使用在线语音备用”，调用 Chrome/Web Speech。该路径需要联网，语音可能发送给浏览器的识别服务；本应用不保存原始录音。
+- 最终保底：键盘方向键始终可用；语音连续两次未理解后才显示鼠标方向按钮。
+- 兼容保留：Picovoice Rhino 代码仍在分支内，可通过 `.env.local` 和 `public/models/README.md` 恢复启用。
 - 未完成目标 MacBook、2 米、1000 条命令的本地验收前，不得宣传“本项目识别率 99%”。验收方案见 `docs/voice/benchmark-protocol.md`。
 
 ## 质量检查

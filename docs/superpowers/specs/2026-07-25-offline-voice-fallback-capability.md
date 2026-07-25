@@ -1,20 +1,20 @@
-# 红房子离线语音备用能力契约
+# 红房子语音双通道能力契约
 
-状态：已批准作为 Picovoice 无权限时的替代路线
+状态：已实施（Vosk 离线主通道 + Web Speech 在线备用 + 键盘保底）
 日期：2026-07-25
 适用版本：一天半黑客松 MVP，13.6 英寸 MacBook Air，桌面 Chrome
 
 ## CAPABILITY
 
-当 Picovoice 账号、AccessKey 或 Rhino 中文 context 无法使用时，受测者仍可在断网状态下用普通话“上、下、左、右、确认”完成双眼视力参考测试；语音模块以可替换 Adapter 接入，失败时自动转入键盘方向键，不中断测试、不把拒识计为答错。团队先在两小时技术闸门内验证 sherpa-onnx 关键词识别的浏览器 WASM 路径，未通过就使用 Vosk WASM 的中文小模型与受限词表。任何“99%”表述只能来自目标设备、2 米距离和规定样本集的本地实测。
+当 Picovoice 账号、AccessKey 或 Rhino 中文 context 无法使用时，受测者默认使用站点内置的 Vosk WASM 中文小模型，也可显式选择 Chrome/Web Speech 联网识别“上、下、左、右、确认”。两条语音路径都使用同一 Adapter 接口，失败时转入键盘方向键，不中断测试、不把拒识计为答错。任何“99%”表述只能来自目标设备、2 米距离和规定样本集的本地实测。
 
 ## CONSTRAINTS
 
 ### 固定产品规则
 
-- 运行时不依赖云端 API、大语言模型、账户或密钥；模型预先放入站点静态资源并在演示机缓存。
+- 默认 Vosk 路径不依赖云端 API、大语言模型、账户或密钥；模型放入站点静态资源。在线 Web Speech 只是用户显式选择的备用通道。
 - 只识别五个业务命令：`上`、`下`、`左`、`右`、`确认`。测试页不接受“确认”，环境页不接受方向。
-- 麦克风权限只能由用户点击触发；不保存、上传或回放原始音频。
+- 麦克风权限只能由用户点击触发；本应用不保存或回放原始音频。选择在线备用时，界面必须提前说明语音可能发送给浏览器的识别服务。
 - `rejected`、超时、输入过轻、模型未就绪和动画未完成时的口令都不计错。
 - 语音连续两次未理解或引擎初始化失败后显示键盘方向键；键盘结果与语音结果走同一测试状态机。
 - UI 和报告默认写“离线命令词实验功能”。只有完整验收通过后才可写“本机实测 ≥99%”。
@@ -25,7 +25,7 @@
 - **首选技术闸门：sherpa-onnx KWS。** 它支持自定义关键词、boosting score 与触发阈值，并提供约 3–3.3M 参数的中英文/中文 KWS 模型，适合封闭词表；但官方当前浏览器 KWS 路径没有达到可直接接入的证据，因此只允许投入 2 小时验证。[官方 KWS 文档](https://k2-fsa.github.io/sherpa/onnx/kws/index.html)
 - **确定性备用：Vosk WASM。** 使用官方 `vosk-model-small-cn-0.22`（约 42 MB），通过语法/动态词表限制到五个命令与未知词；官方给出的通用中文 WER 明显不足以证明本场景 99%，所以必须以本地命令词测试为准。[Vosk 模型表](https://alphacephei.com/vosk/models) [Vosk 能力说明](https://alphacephei.com/vosk/)
 - 浏览器 Vosk 封装属于第三方维护面；必须固定确切版本和文件哈希，完成断网重载测试，不在比赛当天在线安装依赖。[vosk-browser 仓库](https://github.com/ccoreilly/vosk-browser)
-- Web Speech API 不能作为承诺的离线主路径。其传统识别通常依赖服务端；`processLocally` 与语言包安装能力仍属有限可用特性，只能作为可选实验层。[MDN SpeechRecognition](https://developer.mozilla.org/en-US/docs/Web/API/SpeechRecognition) [MDN 本地识别](https://developer.mozilla.org/en-US/docs/Web/API/Web_Speech_API/Using_the_Web_Speech_API#on-device_speech_recognition)
+- Web Speech API 不作为离线主路径；它作为明确标注的联网备用，限定 `zh-CN`、最终结果和一个候选，并严格精确匹配五个命令。[MDN SpeechRecognition](https://developer.mozilla.org/en-US/docs/Web/API/SpeechRecognition)
 - 不在一天半内采集数据并训练 TensorFlow.js 自定义声音模型；这无法在目标人群、两米距离和噪声条件下可靠完成验证。
 
 ### 时间闸门
@@ -67,7 +67,7 @@ page hidden / test not READY → PAUSED_INPUT
 
 ```ts
 type VoiceCommand = "up" | "down" | "left" | "right" | "confirm";
-type VoiceEngineId = "sherpa-kws" | "vosk" | "keyboard";
+type VoiceEngineId = "vosk" | "web-speech" | "rhino" | "keyboard";
 type VoiceScope = "distance-confirmation" | "direction-test";
 type VoiceState =
   | "unavailable"
@@ -98,7 +98,7 @@ interface VoiceAdapter {
 ```
 
 - 现有 `createRhinoController`/`useRhinoVoice` 改为厂商无关的 `createVoiceAdapter`/`useVoiceInput`；UI 不得导入具体引擎 SDK。
-- 构建开关：`VITE_VOICE_ENGINE=sherpa|vosk|keyboard`。缺值或初始化异常时解析为 `keyboard`。
+- 构建开关：`VITE_VOICE_ENGINE=auto|vosk|web-speech|rhino|keyboard`。默认 `auto` 先启动 Vosk，失败后尝试 Web Speech，最后保留键盘。
 - Vosk grammar：`["上", "下", "左", "右", "确认", "[unk]"]`；识别文本必须精确归一化，不能用包含匹配把“上学”等短语当作“上”。
 - sherpa keyword 文件只包含五个命令；阈值与 boosting score 必须记录在模型版本元数据中。
 
@@ -135,6 +135,7 @@ type VoiceTelemetry = {
 ### Security and privacy
 
 - 不再需要 Picovoice AccessKey，也不得把任何供应商密钥放入前端 bundle。
+- Web Speech 不记录自由文本、不保存音频；界面仅传递归一化后的业务命令，错误信息不暴露浏览器内部服务细节。
 - 模型和 Worker 必须同源加载；生产响应配置 `Cross-Origin-Opener-Policy` 与 `Cross-Origin-Embedder-Policy` 时先验证现有部署兼容性。
 - 麦克风 stream 在暂停、完成、路由离开和页面隐藏时停止 track；Worker 在 `dispose()` 后终止。
 

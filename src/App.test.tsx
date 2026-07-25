@@ -23,5 +23,19 @@ describe('Red House app', () => {
 
     await user.click(screen.getByRole('button', { name: '同意并继续' }))
     expect(screen.getByRole('heading', { name: '先量好两米' })).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: '使用在线语音备用' }),
+    ).toBeInTheDocument()
+  })
+
+  it('discloses that the online fallback can send audio to the browser service', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    await user.click(screen.getByRole('button', { name: '开始筛查' }))
+
+    expect(
+      screen.getByText(/在线备用可能将语音发送给浏览器的识别服务/),
+    ).toBeInTheDocument()
   })
 })

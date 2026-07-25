@@ -14,6 +14,47 @@ test('home presents the approved photoreal red-house direction', async ({ page }
   await page.screenshot({ path: 'docs/design/qa/08-live-home.png' })
 })
 
+test('starts the disclosed online voice fallback when Chrome exposes Web Speech', async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    class MockSpeechRecognition {
+      continuous = false
+      interimResults = true
+      lang = ''
+      maxAlternatives = 0
+      onend: (() => void) | null = null
+      onerror: (() => void) | null = null
+      onnomatch: (() => void) | null = null
+      onresult: (() => void) | null = null
+      onstart: (() => void) | null = null
+
+      start() {
+        queueMicrotask(() => this.onstart?.())
+      }
+
+      abort() {}
+    }
+
+    Object.defineProperty(window, 'webkitSpeechRecognition', {
+      configurable: true,
+      value: MockSpeechRecognition,
+    })
+    Object.defineProperty(window, 'SpeechRecognition', {
+      configurable: true,
+      value: MockSpeechRecognition,
+    })
+  })
+
+  const app = new VisionPage(page)
+  await app.goto()
+  await app.enterScreening()
+
+  await page.getByRole('button', { name: '使用在线语音备用' }).click()
+  await expect(page.getByRole('button', { name: '在线语音备用已开启' })).toBeVisible()
+  await expect(page.getByText(/语音可能由浏览器服务处理/)).toBeVisible()
+})
+
 test('completes right and left eye screening and stores a report', async ({ page }) => {
   const app = new VisionPage(page)
   await app.goto()
