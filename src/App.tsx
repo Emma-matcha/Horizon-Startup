@@ -18,10 +18,15 @@ import {
   type AppData,
   type ScreeningSession,
 } from './data/storage'
+import {
+  loadPreferences,
+  saveReferenceWordsEnabled,
+} from './data/preferences'
 import { analyzeTrend, type TrendStatus } from './domain/risk'
 import {
   DEFAULT_CALIBRATION_CSS_PX,
   clampCalibrationCssPx,
+  getCalibratedOptotypeCssPx,
 } from './domain/calibration'
 import {
   applyEyeAnswer,
@@ -30,6 +35,7 @@ import {
   type EyeTestState,
 } from './domain/testMachine'
 import type { Direction } from './domain/optotype'
+import { selectNextReferenceWord } from './domain/referenceWords'
 import type { VoiceCommand, VoiceScope } from './voice/contracts'
 import { useVoiceInput } from './voice/useVoiceInput'
 
@@ -129,9 +135,11 @@ function AppHeader({ onHome, onProfile }: { onHome: () => void; onProfile: () =>
 function HomePage({
   onStart,
   onProfile,
+  onSettings,
 }: {
   onStart: () => void
   onProfile: () => void
+  onSettings: () => void
 }) {
   const heroRef = useRef<HTMLElement>(null)
   const onPointerMove = (event: ReactPointerEvent<HTMLElement>) => {
@@ -148,7 +156,15 @@ function HomePage({
       <div className="home__veil" aria-hidden="true" />
       <header className="home__header">
         <BrandMark inverse />
-        <button className="glass-button" onClick={onProfile}>登录</button>
+        <div className="home__header-actions">
+          <button aria-label="打开设置" className="settings-button" onClick={onSettings}>
+            <svg aria-hidden="true" viewBox="0 0 24 24">
+              <path d="M12 8.25A3.75 3.75 0 1 0 12 15.75 3.75 3.75 0 0 0 12 8.25Z" />
+              <path d="M19.1 13.2a7.6 7.6 0 0 0 .04-2.31l2-1.56-2-3.47-2.5 1a7.4 7.4 0 0 0-2-1.16L14.26 3h-4.02l-.39 2.7a7.4 7.4 0 0 0-2 1.16l-2.5-1-2 3.47 2 1.56a7.6 7.6 0 0 0 .04 2.31l-2.04 1.58 2 3.47 2.57-1.03c.58.46 1.23.83 1.94 1.1l.38 2.68h4.02l.38-2.68a7.4 7.4 0 0 0 1.94-1.1l2.57 1.03 2-3.47-2.04-1.58Z" />
+            </svg>
+          </button>
+          <button className="glass-button" onClick={onProfile}>登录</button>
+        </div>
       </header>
       <section className="home__content">
         <p className="eyebrow eyebrow--light">TWO METRES · LOCAL FIRST</p>
@@ -163,6 +179,38 @@ function HomePage({
         <span>筛查结果不能替代专业眼科检查或医学诊断</span>
       </footer>
     </main>
+  )
+}
+
+function SettingsDialog({
+  referenceWordsEnabled,
+  onClose,
+  onToggleReferenceWords,
+}: {
+  referenceWordsEnabled: boolean
+  onClose: () => void
+  onToggleReferenceWords: () => void
+}) {
+  return (
+    <div className="modal-backdrop" role="presentation">
+      <section aria-labelledby="settings-title" aria-modal="true" className="settings-card" role="dialog">
+        <button aria-label="关闭设置" className="close-button" onClick={onClose}>×</button>
+        <p className="eyebrow">DISPLAY</p>
+        <h2 id="settings-title">测试显示设置</h2>
+        <p>选择正式测试时是否在 E 字视标下方显示生活参考词。</p>
+        <button
+          aria-checked={referenceWordsEnabled}
+          aria-label="显示生活参考词"
+          className="settings-switch"
+          onClick={onToggleReferenceWords}
+          role="switch"
+        >
+          <span><strong>生活参考词</strong><small>与当前视标使用相同尺寸</small></span>
+          <i aria-hidden="true" />
+        </button>
+        <small className="settings-note">此选项只影响显示，不会改变测试分数。设置仅保存在当前浏览器。</small>
+      </section>
+    </div>
   )
 }
 
@@ -243,6 +291,15 @@ function SetupPage({
             <span><i />Chrome 桌面端</span><span><i />Windows 显示缩放 100%</span><span><i />浏览器缩放 100%</span>
           </div>
         </article>
+        <article className="instruction-card instruction-card--reference">
+          <span className="step-number">04</span>
+          <div>
+            <h2>生活单词参考</h2>
+            <p>测试时，E 字视标正下方会出现一个每次变化的双字生活词。单词字号与 E 字视标使用完全相同的尺寸数值，帮助你感受真实生活中的阅读效果。</p>
+            <strong>它只用于直观参考，不会参与评分。可返回主页，通过齿轮设置随时关闭或开启。</strong>
+          </div>
+          <div className="reference-guide-demo" aria-hidden="true"><span>远山</span><i /></div>
+        </article>
       </section>
       <div className="setup-actions">
         <button className="secondary-button voice-button" onClick={onVoice}>
@@ -278,6 +335,8 @@ function TestPage({
   onReady,
   showDirectionPad,
   voiceState,
+  referenceWord,
+  showReferenceWord,
 }: {
   eye: Eye
   state: EyeTestState
@@ -288,15 +347,34 @@ function TestPage({
   onReady: () => void
   showDirectionPad: boolean
   voiceState: string
+  referenceWord: string
+  showReferenceWord: boolean
 }) {
+  const displaySize = getCalibratedOptotypeCssPx(state.level, calibrationPx)
   return (
     <main className="test-page">
       <div className="test-meta">
         <span>{eye === 'right' ? '右眼' : '左眼'}</span>
         <span>{state.level.toFixed(1)}</span>
       </div>
-      <div className="symbol-stage" key={`${eye}-${answerIndex}`} onAnimationEnd={onReady}>
+      <div
+        className="symbol-stage"
+        key={`${eye}-${answerIndex}`}
+        onAnimationEnd={(event) => {
+          if ((event.target as HTMLElement).classList.contains('optotype--animated')) onReady()
+        }}
+      >
         <Optotype calibrationPx={calibrationPx} className="optotype--animated" direction={direction} level={state.level} />
+        {showReferenceWord && (
+          <span
+            aria-label={`生活参考词：${referenceWord}`}
+            className="reference-word"
+            data-size={displaySize.toFixed(2)}
+            style={{ fontSize: `${displaySize}px` }}
+          >
+            {referenceWord}
+          </span>
+        )}
       </div>
       <p aria-live="polite" className="voice-state">{voiceState}</p>
       {showDirectionPad && (
@@ -447,12 +525,18 @@ export default function App() {
   const [data, setData] = useState<AppData>(() => loadAppData())
   const [showConsent, setShowConsent] = useState(false)
   const [showProfile, setShowProfile] = useState(false)
+  const [showSettings, setShowSettings] = useState(false)
+  const [referenceWordsEnabled, setReferenceWordsEnabled] = useState(
+    () => loadPreferences().referenceWordsEnabled,
+  )
   const [calibrationPx, setCalibrationPx] = useState(DEFAULT_CALIBRATION_CSS_PX)
   const [count, setCount] = useState(3)
   const [eye, setEye] = useState<Eye>('right')
   const [eyeState, setEyeState] = useState<EyeTestState>(() => createEyeTestState())
   const [direction, setDirection] = useState<Direction>(() => selectNextDirection([]))
   const [directionHistory, setDirectionHistory] = useState<Direction[]>([])
+  const [referenceWord, setReferenceWord] = useState(() => selectNextReferenceWord([]))
+  const referenceWordHistoryRef = useRef<string[]>([])
   const [answers, setAnswers] = useState<AnswerRecord[]>([])
   const [results, setResults] = useState<Partial<Record<Eye, number>>>({})
   const [symbolReady, setSymbolReady] = useState(false)
@@ -464,11 +548,20 @@ export default function App() {
     setView('countdown')
   }, [])
 
+  const advanceReferenceWord = useCallback(() => {
+    const nextWord = selectNextReferenceWord(referenceWordHistoryRef.current)
+    referenceWordHistoryRef.current = [...referenceWordHistoryRef.current, nextWord]
+    setReferenceWord(nextWord)
+  }, [])
+
   const resetTest = useCallback(() => {
     setEye('right')
     setEyeState(createEyeTestState())
     setDirection(selectNextDirection([]))
     setDirectionHistory([])
+    const firstWord = selectNextReferenceWord([])
+    setReferenceWord(firstWord)
+    referenceWordHistoryRef.current = [firstWord]
     setAnswers([])
     setResults({})
     setSymbolReady(false)
@@ -491,6 +584,7 @@ export default function App() {
           setEyeState(createEyeTestState())
           setDirection(selectNextDirection([direction]))
           setDirectionHistory([])
+          advanceReferenceWord()
           setSymbolReady(false)
           setView('eyeSwitch')
         } else {
@@ -512,8 +606,9 @@ export default function App() {
       const nextHistory = [...directionHistory, direction]
       setDirectionHistory(nextHistory)
       setDirection(selectNextDirection(nextHistory))
+      advanceReferenceWord()
     },
-    [direction, directionHistory, eye, eyeState, results.right, symbolReady, view],
+    [advanceReferenceWord, direction, directionHistory, eye, eyeState, results.right, symbolReady, view],
   )
 
   const onVoiceCommand = useCallback(
@@ -587,13 +682,13 @@ export default function App() {
   const content = (() => {
     switch (view) {
       case 'home':
-        return <HomePage onProfile={() => setShowProfile(true)} onStart={beginFromHome} />
+        return <HomePage onProfile={() => setShowProfile(true)} onSettings={() => setShowSettings(true)} onStart={beginFromHome} />
       case 'setup':
         return <SetupPage calibrationPx={calibrationPx} onCalibration={setCalibrationPx} onOnlineVoice={() => void voice.activate('web-speech')} onStart={startCountdown} onVoice={() => void voice.activate()} voiceLabel={voiceLabel} />
       case 'countdown':
         return <CountdownPage count={count} eye={eye} />
       case 'test':
-        return <TestPage answerIndex={answers.length} calibrationPx={calibrationPx} direction={direction} eye={eye} onAnswer={handleAnswer} onReady={() => setSymbolReady(true)} showDirectionPad={voice.state !== 'listening'} state={eyeState} voiceState={symbolReady ? (voice.detail || (voice.state === 'listening' ? '离线语音已开启' : '键盘方向键已就绪')) : '视标准备中'} />
+        return <TestPage answerIndex={answers.length} calibrationPx={calibrationPx} direction={direction} eye={eye} onAnswer={handleAnswer} onReady={() => setSymbolReady(true)} referenceWord={referenceWord} showDirectionPad={voice.state !== 'listening'} showReferenceWord={referenceWordsEnabled} state={eyeState} voiceState={symbolReady ? (voice.detail || (voice.state === 'listening' ? '离线语音已开启' : '键盘方向键已就绪')) : '视标准备中'} />
       case 'eyeSwitch':
         return <EyeSwitchPage onContinue={startCountdown} />
       case 'analysis':
@@ -634,6 +729,17 @@ export default function App() {
             setData(updateProfile({ nickname }))
             setShowProfile(false)
           }}
+        />
+      )}
+      {showSettings && (
+        <SettingsDialog
+          onClose={() => setShowSettings(false)}
+          onToggleReferenceWords={() => {
+            const next = !referenceWordsEnabled
+            setReferenceWordsEnabled(next)
+            saveReferenceWordsEnabled(next)
+          }}
+          referenceWordsEnabled={referenceWordsEnabled}
         />
       )}
     </div>

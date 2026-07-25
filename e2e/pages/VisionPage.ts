@@ -34,16 +34,21 @@ export class VisionPage {
 
   async finishEyeWithCorrectAnswers() {
     for (let answer = 0; answer < 8; answer += 1) {
-      const mark = this.page.locator('.optotype')
-      await expect(mark).toHaveCSS('opacity', '1')
-      const direction = await mark.getAttribute('data-direction')
-      if (!direction || !keyForDirection[direction]) {
-        throw new Error(`Unexpected optotype direction: ${direction}`)
-      }
-      await this.page.keyboard.press(keyForDirection[direction])
+      await this.answerCurrentDirection()
       if (answer < 7) {
+        const mark = this.page.locator('.optotype')
         await expect(mark).toHaveAttribute('data-level', (4.7 + answer / 10).toFixed(1))
       }
     }
+  }
+
+  async answerCurrentDirection() {
+    const mark = this.page.locator('.optotype')
+    await expect(mark).toHaveCSS('opacity', '1')
+    const direction = await mark.getAttribute('data-direction')
+    if (!direction || !keyForDirection[direction]) {
+      throw new Error(`Unexpected optotype direction: ${direction}`)
+    }
+    await this.page.keyboard.press(keyForDirection[direction])
   }
 }

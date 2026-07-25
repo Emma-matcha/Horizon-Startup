@@ -26,6 +26,57 @@ test('offers physical screen calibration for Windows displays', async ({ page })
   await expect(page.getByRole('status')).toHaveText('158 px')
 })
 
+test('renders a fresh same-size life word beneath each optotype', async ({ page }) => {
+  const app = new VisionPage(page)
+  await app.goto()
+  await app.enterScreening()
+
+  await expect(page.getByRole('heading', { name: '生活单词参考' })).toBeVisible()
+  await expect(page.getByText(/不会参与评分/)).toBeVisible()
+  await app.startEye()
+
+  const mark = page.locator('.optotype')
+  const word = page.locator('.reference-word')
+  await expect(word).toBeVisible()
+  const firstWord = await word.textContent()
+  const dimensions = await Promise.all([
+    mark.evaluate((element) => Number.parseFloat((element as HTMLElement).style.width)),
+    word.evaluate((element) => Number.parseFloat((element as HTMLElement).style.fontSize)),
+  ])
+  expect(dimensions[1]).toBe(dimensions[0])
+
+  await app.answerCurrentDirection()
+  await expect(word).not.toHaveText(firstWord ?? '')
+})
+
+test('persists the home gear switch and hides reference words when disabled', async ({ page }) => {
+  const app = new VisionPage(page)
+  await app.goto()
+
+  await page.getByRole('button', { name: '打开设置' }).click()
+  const toggle = page.getByRole('switch', { name: '显示生活参考词' })
+  await expect(toggle).toHaveAttribute('aria-checked', 'true')
+  await toggle.click()
+  await expect(toggle).toHaveAttribute('aria-checked', 'false')
+  await page.getByRole('button', { name: '关闭设置' }).click()
+
+  await page.reload()
+  await page.getByRole('button', { name: '打开设置' }).click()
+  await expect(page.getByRole('switch', { name: '显示生活参考词' })).toHaveAttribute(
+    'aria-checked',
+    'false',
+  )
+  await page.getByRole('button', { name: '关闭设置' }).click()
+
+  await app.enterScreening()
+  await expect(page.getByRole('button', { name: '打开设置' })).toHaveCount(0)
+  await app.startEye()
+  await expect(page.locator('.reference-word')).toHaveCount(0)
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('red-house-vision:preferences:v1'))).toContain(
+    '"referenceWordsEnabled":false',
+  )
+})
+
 test('starts the disclosed online voice fallback when Chrome exposes Web Speech', async ({
   page,
 }) => {

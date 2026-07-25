@@ -15,6 +15,21 @@ describe('Red House app', () => {
     expect(screen.getByText(/Windows 10\/11 或 macOS/)).toBeInTheDocument()
   })
 
+  it('offers a home-only gear setting and persists the reference-word switch', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    await user.click(screen.getByRole('button', { name: '打开设置' }))
+    const toggle = screen.getByRole('switch', { name: '显示生活参考词' })
+    expect(toggle).toHaveAttribute('aria-checked', 'true')
+
+    await user.click(toggle)
+    expect(toggle).toHaveAttribute('aria-checked', 'false')
+    expect(localStorage.getItem('red-house-vision:preferences:v1')).toContain(
+      '"referenceWordsEnabled":false',
+    )
+  })
+
   it('supports physical calibration for Windows displays', async () => {
     const user = userEvent.setup()
     render(<App />)
@@ -24,6 +39,10 @@ describe('Red House app', () => {
 
     expect(screen.getByText('Windows 显示缩放 100%')).toBeInTheDocument()
     expect(screen.getByText(/不依赖屏幕型号或分辨率/)).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '生活单词参考' })).toBeInTheDocument()
+    expect(screen.getByText(/与 E 字视标使用完全相同的尺寸数值/)).toBeInTheDocument()
+    expect(screen.getByText(/不会参与评分/)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '打开设置' })).not.toBeInTheDocument()
 
     const shrink = screen.getByRole('button', { name: '缩短校准线' })
     for (let click = 0; click < 31; click += 1) await user.click(shrink)
